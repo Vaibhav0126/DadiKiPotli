@@ -4,6 +4,8 @@ __pycache__/
 *.pyc
 work/
 output/
+secrets/*
+!secrets/.gitkeep
 assets/music/*
 !assets/music/.gitkeep
 assets/fonts/*

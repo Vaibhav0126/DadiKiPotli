@@ -1,7 +1,8 @@
-"""Orchestrator. Runs the four modules in order, resuming from whatever exists.
+"""Orchestrator. Runs the modules in order, resuming from whatever exists.
 
     python -m src.main "Akbar asks Birbal for a flower that never wilts"
     python -m src.main --batch ideas.txt
+    python -m src.main "..." --publish
 """
 
 from __future__ import annotations
@@ -13,12 +14,13 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from . import audio_engine, caption_engine, composer, motion_engine, script_engine, visual_engine
+from . import audio_engine, caption_engine, composer, motion_engine, publish_engine, script_engine, visual_engine
 from .config import OUTPUT, Config, load_config, work_dir
 from .cost import CostLedger
 from .doctor import run_checks
 from .ffmpeg_util import FFmpegError, ensure_available
 from .models import SceneAudio, Story, Timeline, read_json, slugify, write_json
+from .publish_engine import parse_platforms
 
 log = logging.getLogger("pipeline")
 
@@ -113,7 +115,15 @@ def _motion_stage(cfg: Config, story: Story, visuals, wd: Path):
     return visuals, ledger
 
 
-def run_pipeline(cfg: Config, idea: str, *, force: bool, review: bool, mode: str) -> Path:
+def run_pipeline(
+    cfg: Config,
+    idea: str,
+    *,
+    force: bool,
+    review: bool,
+    mode: str,
+    platforms: list[str] | None = None,
+) -> Path:
     story, wd = _script_stage(cfg, idea, force)
     story, scenes = _audio_stage(cfg, story, wd, force)
     visuals = _visual_stage(cfg, story, wd, mode)
@@ -150,6 +160,17 @@ def run_pipeline(cfg: Config, idea: str, *, force: bool, review: bool, mode: str
              len(visuals), animated, len(visuals) - animated)
     log.info("spend     : $%.2f", ledger.spent)
     log.info("output    : %s", dest)
+
+    if platforms:
+        _stage("Module 5: publish")
+        result = publish_engine.publish(
+            cfg, story, dest, wd, platforms, force=force,
+        )
+        if result.youtube_url:
+            log.info("youtube   : %s", result.youtube_url)
+        if result.instagram_url:
+            log.info("instagram : %s", result.instagram_url)
+
     return dest
 
 
@@ -165,6 +186,15 @@ def main() -> int:
         "--consistency", choices=["seed", "kontext"], default="seed",
         help="character consistency strategy for images",
     )
+    parser.add_argument(
+        "--publish",
+        nargs="?",
+        const="youtube,instagram",
+        default=None,
+        metavar="PLATFORMS",
+        help="after render, upload to youtube and/or instagram "
+        "(default: both; e.g. --publish youtube)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -179,6 +209,11 @@ def main() -> int:
 
     if not args.idea and not args.batch:
         parser.error("provide a story idea or --batch")
+
+    try:
+        platforms = parse_platforms(args.publish)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     try:
         ensure_available()
@@ -203,7 +238,14 @@ def main() -> int:
         log.info("[%d/%d] %s", i, len(ideas), idea)
         log.info("=" * 60)
         try:
-            run_pipeline(cfg, idea, force=args.force, review=args.review, mode=args.consistency)
+            run_pipeline(
+                cfg,
+                idea,
+                force=args.force,
+                review=args.review,
+                mode=args.consistency,
+                platforms=platforms or None,
+            )
         except KeyboardInterrupt:
             log.warning("interrupted")
             return 130

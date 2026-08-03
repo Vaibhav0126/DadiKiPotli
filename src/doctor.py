@@ -115,6 +115,86 @@ def _check_music(cfg: Config, report: Report) -> None:
         report.add(WARN, "music", f"none in {directory} -- video will have voice only")
 
 
+def _check_youtube_publish(cfg: Config, report: Report) -> None:
+    secrets = cfg.youtube_client_secrets()
+    token = cfg.youtube_token_path()
+    if not secrets.exists():
+        report.add(
+            WARN,
+            "youtube auth",
+            f"no client secrets at {secrets.name} -- needed for --publish youtube "
+            "(python -m tools.auth_youtube)",
+        )
+        return
+    if not token.exists():
+        report.add(
+            WARN,
+            "youtube auth",
+            f"client secrets OK; run python -m tools.auth_youtube to create {token.name}",
+        )
+        return
+    try:
+        from google.oauth2.credentials import Credentials
+        from .publish_engine import YOUTUBE_SCOPES
+
+        creds = Credentials.from_authorized_user_file(str(token), YOUTUBE_SCOPES)
+        if creds.valid or (creds.refresh_token and creds.expired):
+            report.add(OK, "youtube auth", f"token at {token.name}")
+        else:
+            report.add(WARN, "youtube auth", "token invalid -- re-run python -m tools.auth_youtube")
+    except Exception as exc:  # noqa: BLE001
+        report.add(WARN, "youtube auth", f"could not read token: {exc}")
+
+
+def _check_instagram_publish(cfg: Config, report: Report) -> None:
+    token = cfg.meta_access_token
+    user_id = cfg.instagram_user_id
+    if not token or not user_id:
+        report.add(
+            WARN,
+            "instagram auth",
+            "META_ACCESS_TOKEN / INSTAGRAM_USER_ID not set -- needed for --publish instagram",
+        )
+        return
+    report.add(OK, "instagram auth", f"user id {user_id}")
+
+    missing = [
+        name
+        for name, val in [
+            ("R2_ACCOUNT_ID", cfg.r2_account_id),
+            ("R2_ACCESS_KEY_ID", cfg.r2_access_key_id),
+            ("R2_SECRET_ACCESS_KEY", cfg.r2_secret_access_key),
+            ("R2_BUCKET", cfg.r2_bucket),
+            ("R2_PUBLIC_BASE_URL", cfg.r2_public_base_url),
+        ]
+        if not val
+    ]
+    if missing:
+        report.add(
+            WARN,
+            "R2 hosting",
+            f"missing {', '.join(missing)} -- Instagram needs a public video URL via R2",
+        )
+        return
+
+    try:
+        import boto3
+        from botocore.config import Config as BotoConfig
+
+        client = boto3.client(
+            "s3",
+            endpoint_url=f"https://{cfg.r2_account_id}.r2.cloudflarestorage.com",
+            aws_access_key_id=cfg.r2_access_key_id,
+            aws_secret_access_key=cfg.r2_secret_access_key,
+            region_name="auto",
+            config=BotoConfig(signature_version="s3v4"),
+        )
+        client.head_bucket(Bucket=cfg.r2_bucket)
+        report.add(OK, "R2 hosting", f"bucket {cfg.r2_bucket} reachable")
+    except Exception as exc:  # noqa: BLE001
+        report.add(WARN, "R2 hosting", f"could not reach bucket: {exc}")
+
+
 def _check_network(cfg: Config, report: Report) -> None:
     if cfg.images.provider == "cloudflare" and cfg.cloudflare_account_id:
         # Hit the Workers AI run endpoint with an empty body — auth failures
@@ -153,6 +233,8 @@ def run_checks(cfg: Config) -> int:
     _check_images(cfg, report)
     _check_fal(cfg, report)
     _check_music(cfg, report)
+    _check_youtube_publish(cfg, report)
+    _check_instagram_publish(cfg, report)
     _check_network(cfg, report)
 
     print(report.render())

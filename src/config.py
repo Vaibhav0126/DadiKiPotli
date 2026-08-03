@@ -96,6 +96,32 @@ class MusicCfg(BaseModel):
     duck_db: float = -8.0
 
 
+class YouTubePublishCfg(BaseModel):
+    privacy: str = "public"  # public | unlisted | private
+    category_id: str = "24"  # Entertainment
+    default_tags: list[str] = [
+        "Shorts",
+        "HindiStories",
+        "AkbarBirbal",
+        "TenaliRaman",
+        "moralstories",
+    ]
+
+
+class InstagramPublishCfg(BaseModel):
+    caption_max_chars: int = 2200
+    r2_prefix: str = "shorts/"
+    poll_interval_s: float = 5.0
+    timeout_s: float = 600.0
+    graph_version: str = "v21.0"
+
+
+class PublishCfg(BaseModel):
+    brand_name: str = "Hindi Stories"
+    youtube: YouTubePublishCfg = YouTubePublishCfg()
+    instagram: InstagramPublishCfg = InstagramPublishCfg()
+
+
 class Config(BaseModel):
     story: StoryCfg = StoryCfg()
     audio: AudioCfg = AudioCfg()
@@ -104,6 +130,7 @@ class Config(BaseModel):
     video: VideoCfg = VideoCfg()
     captions: CaptionsCfg = CaptionsCfg()
     music: MusicCfg = MusicCfg()
+    publish: PublishCfg = PublishCfg()
 
     # --- secrets, from .env rather than config.yaml ---
     @property
@@ -131,6 +158,46 @@ class Config(BaseModel):
     @property
     def fal_key(self) -> str | None:
         return os.getenv("FAL_KEY", "").strip() or None
+
+    def _env_path(self, key: str, default: str) -> Path:
+        raw = os.getenv(key, default).strip() or default
+        path = Path(raw)
+        return path if path.is_absolute() else ROOT / path
+
+    def youtube_client_secrets(self) -> Path:
+        return self._env_path("YOUTUBE_CLIENT_SECRETS", "secrets/youtube_client_secret.json")
+
+    def youtube_token_path(self) -> Path:
+        return self._env_path("YOUTUBE_TOKEN_PATH", "secrets/youtube_token.json")
+
+    @property
+    def meta_access_token(self) -> str | None:
+        return os.getenv("META_ACCESS_TOKEN", "").strip() or None
+
+    @property
+    def instagram_user_id(self) -> str | None:
+        return os.getenv("INSTAGRAM_USER_ID", "").strip() or None
+
+    @property
+    def r2_account_id(self) -> str | None:
+        return os.getenv("R2_ACCOUNT_ID", "").strip() or None
+
+    @property
+    def r2_access_key_id(self) -> str | None:
+        return os.getenv("R2_ACCESS_KEY_ID", "").strip() or None
+
+    @property
+    def r2_secret_access_key(self) -> str | None:
+        return os.getenv("R2_SECRET_ACCESS_KEY", "").strip() or None
+
+    @property
+    def r2_bucket(self) -> str | None:
+        return os.getenv("R2_BUCKET", "").strip() or None
+
+    @property
+    def r2_public_base_url(self) -> str | None:
+        base = os.getenv("R2_PUBLIC_BASE_URL", "").strip().rstrip("/")
+        return base or None
 
     def font_path(self) -> Path:
         return ROOT / self.captions.font_file
