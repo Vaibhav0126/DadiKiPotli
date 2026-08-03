@@ -1,5 +1,6 @@
 # One story idea per line. Blank lines and # comments are ignored.
-# Run all of them with:  python -m src.main --batch ideas.txt
+# Daily Action consumes the first unused line and moves it to ideas_used.txt.
+# Run all remaining locally with:  python -m src.main --batch ideas.txt
 
 Akbar asks Birbal to bring him a flower that never wilts
 Tenali Raman outwits a greedy merchant who sells water from a sacred well

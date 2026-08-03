@@ -8,5 +8,7 @@ secrets/*
 !secrets/.gitkeep
 assets/music/*
 !assets/music/.gitkeep
+# Caption font is required in CI; keep Poppins tracked.
 assets/fonts/*
 !assets/fonts/.gitkeep
+!assets/fonts/Poppins-Bold.ttf

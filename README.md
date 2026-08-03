@@ -296,6 +296,49 @@ local renders.
 .venv/bin/python -m src.main "..." --publish instagram
 ```
 
+## Daily GitHub Action (1pm JST)
+
+Workflow: `.github/workflows/daily-post.yml`
+
+- Runs every day at **13:00 JST** (`cron: 0 4 * * *` UTC)
+- Also runnable manually via **Actions → Daily Short → Run workflow**
+- Takes the first line from `ideas.txt`, renders one short, publishes, then
+  moves that line to `ideas_used.txt` (committed back to the repo)
+- If `ideas.txt` is empty, Gemini invents a fresh idea
+- Defaults to `--no-motion` (free Ken Burns). Uncheck that on a manual run
+  only if `FAL_KEY` is set and you want paid clips
+
+### Secrets to add
+
+Repo → **Settings → Secrets and variables → Actions**. Paste values from your
+local `.env` / `secrets/` files:
+
+| Secret | Required for | Notes |
+|---|---|---|
+| `GEMINI_API_KEY` | always | script + publish metadata |
+| `CLOUDFLARE_ACCOUNT_ID` | images | Workers AI |
+| `CLOUDFLARE_API_TOKEN` | images | Workers AI |
+| `YOUTUBE_TOKEN_JSON` | YouTube | **full contents** of `secrets/youtube_token.json` after `python -m tools.auth_youtube` |
+| `YOUTUBE_CLIENT_SECRET_JSON` | YouTube (optional) | full contents of `secrets/youtube_client_secret.json` |
+| `META_ACCESS_TOKEN` | Instagram | long-lived Page token |
+| `INSTAGRAM_USER_ID` | Instagram | IG professional account id |
+| `R2_ACCOUNT_ID` | Instagram | Cloudflare account id |
+| `R2_ACCESS_KEY_ID` | Instagram | R2 API token |
+| `R2_SECRET_ACCESS_KEY` | Instagram | R2 API token |
+| `R2_BUCKET` | Instagram | e.g. `hindi-stories-shorts` |
+| `R2_PUBLIC_BASE_URL` | Instagram | e.g. `https://pub-xxxxx.r2.dev` |
+| `FAL_KEY` | motion only | optional; leave unset for free Ken Burns |
+
+YouTube-only is fine: set the Gemini + Cloudflare + `YOUTUBE_TOKEN_JSON`
+secrets and skip the Instagram/R2 ones. The job posts to whichever platforms
+have credentials.
+
+Quick local check of the same entrypoint:
+
+```bash
+.venv/bin/python -m tools.daily_post --no-motion --publish youtube
+```
+
 ## Tuning
 
 Everything lives in `config.yaml`.
