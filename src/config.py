@@ -1,0 +1,163 @@
+"""Config loading and shared filesystem paths."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any
+
+import yaml
+from dotenv import load_dotenv
+from pydantic import BaseModel
+
+ROOT = Path(__file__).resolve().parent.parent
+WORK = ROOT / "work"
+OUTPUT = ROOT / "output"
+
+
+class StoryCfg(BaseModel):
+    models: list[str] = [
+        "gemini-3.5-flash",
+        "gemini-3-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-2.0-flash",
+        "gemini-flash-latest",
+    ]
+    scene_count: int = 10
+    max_hindi_words: int = 145
+    min_duration_s: float = 48.0
+    max_duration_s: float = 62.0
+    max_script_retries: int = 2
+    art_style: str = ""
+
+
+class AudioCfg(BaseModel):
+    voice: str = "hi-IN-MadhurNeural"
+    rate: str = "+8%"
+    pitch: str = "+0Hz"
+    scene_gap_s: float = 0.25
+
+
+class ImagesCfg(BaseModel):
+    # cloudflare (free, preferred) | pollinations (fallback)
+    provider: str = "cloudflare"
+    # Cloudflare: black-forest-labs/flux-2-klein-4b (true 9:16 via multipart)
+    # Pollinations keyed: flux | Pollinations anonymous: dreamshaper
+    model: str = "black-forest-labs/flux-2-klein-4b"
+    anonymous_model: str = "dreamshaper"  # pollinations keyless only
+    # klein supports custom dims; 768x1344 is a reliable free-tier 9:16 size.
+    # ffmpeg scales these up to video.width x video.height on compose.
+    width: int = 768
+    height: int = 1344
+    min_request_interval_s: float = 0.5
+    max_retries: int = 4
+
+
+class MotionCfg(BaseModel):
+    enabled: bool = True
+    provider: str = "fal"
+    model: str = "fal-ai/wan-25-preview/image-to-video"
+    resolution: str = "480p"
+    clip_seconds: int = 5
+    hero_scene_count: int = 4
+    usd_per_second: float = 0.05
+    max_cost_usd: float = 1.20
+    poll_interval_s: float = 3.0
+    timeout_s: float = 420.0
+
+
+class VideoCfg(BaseModel):
+    width: int = 1080
+    height: int = 1920
+    fps: int = 30
+    transition: str = "fade"
+    transition_s: float = 0.3
+
+
+class CaptionsCfg(BaseModel):
+    font_file: str = "assets/fonts/Poppins-Bold.ttf"
+    font_name: str = "Poppins"
+    font_size: int = 84
+    vertical_position: float = 0.56
+    max_words_per_group: int = 4
+    max_group_duration_s: float = 2.2
+    primary_colour: str = "&H00FFFFFF&"
+    highlight_colour: str = "&H0000E5FF&"
+    outline_colour: str = "&H00000000&"
+    outline: int = 5
+    shadow: int = 2
+    uppercase: bool = True
+
+
+class MusicCfg(BaseModel):
+    enabled: bool = True
+    directory: str = "assets/music"
+    volume_db: float = -22.0
+    duck_db: float = -8.0
+
+
+class Config(BaseModel):
+    story: StoryCfg = StoryCfg()
+    audio: AudioCfg = AudioCfg()
+    images: ImagesCfg = ImagesCfg()
+    motion: MotionCfg = MotionCfg()
+    video: VideoCfg = VideoCfg()
+    captions: CaptionsCfg = CaptionsCfg()
+    music: MusicCfg = MusicCfg()
+
+    # --- secrets, from .env rather than config.yaml ---
+    @property
+    def gemini_api_key(self) -> str:
+        key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. Copy .env.example to .env and add a key "
+                "from https://aistudio.google.com/apikey (free tier is enough)."
+            )
+        return key
+
+    @property
+    def pollinations_token(self) -> str | None:
+        return os.getenv("POLLINATIONS_TOKEN", "").strip() or None
+
+    @property
+    def cloudflare_account_id(self) -> str | None:
+        return os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip() or None
+
+    @property
+    def cloudflare_api_token(self) -> str | None:
+        return os.getenv("CLOUDFLARE_API_TOKEN", "").strip() or None
+
+    @property
+    def fal_key(self) -> str | None:
+        return os.getenv("FAL_KEY", "").strip() or None
+
+    def font_path(self) -> Path:
+        return ROOT / self.captions.font_file
+
+    def music_dir(self) -> Path:
+        return ROOT / self.music.directory
+
+
+def load_config(path: Path | None = None) -> Config:
+    load_dotenv(ROOT / ".env")
+    cfg_path = path or ROOT / "config.yaml"
+    raw: dict[str, Any] = {}
+    if cfg_path.exists():
+        raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    cfg = Config.model_validate(raw)
+
+    # Keyed Pollinations does not throttle secret keys; keep a polite gap.
+    if (
+        cfg.images.provider == "pollinations"
+        and cfg.pollinations_token
+        and cfg.images.min_request_interval_s > 1.0
+    ):
+        cfg.images.min_request_interval_s = 1.0
+    return cfg
+
+
+def work_dir(slug: str) -> Path:
+    d = WORK / slug
+    d.mkdir(parents=True, exist_ok=True)
+    return d

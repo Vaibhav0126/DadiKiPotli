@@ -1,0 +1,8 @@
+# One story idea per line. Blank lines and # comments are ignored.
+# Run all of them with:  python -m src.main --batch ideas.txt
+
+Akbar asks Birbal to bring him a flower that never wilts
+Tenali Raman outwits a greedy merchant who sells water from a sacred well
+Birbal proves that a poor man's honesty is worth more than a rich man's gold
+Vikram and Betaal: the riddle of the three suitors who all claim the same bride
+Tenali Raman tricks a thief into confessing by using a "magic" stick

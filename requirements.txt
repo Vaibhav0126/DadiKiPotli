@@ -1,0 +1,17 @@
+# LLM (Module 1) - free tier
+google-genai>=1.0.0
+
+# TTS (Module 2) - 7.2.7+ required, older versions 403 on Microsoft's rotated tokens
+edge-tts>=7.2.7
+
+# HTTP (Modules 3a/3b)
+httpx>=0.28.0
+tenacity>=9.0.0
+
+# Data model / config
+pydantic>=2.10.0
+PyYAML>=6.0
+python-dotenv>=1.0.0
+
+# Image validation + QC contact sheet
+Pillow>=11.0.0

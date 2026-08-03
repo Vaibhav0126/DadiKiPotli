@@ -1,0 +1,87 @@
+story:
+  # Tried in order; the first one this key can reach is used and remembered.
+  # Google retires model IDs fairly aggressively, so this is a list rather than
+  # a single name.
+  models:
+    - gemini-3.5-flash
+    - gemini-3-flash
+    - gemini-3.1-flash-lite
+    - gemini-2.0-flash
+    - gemini-flash-latest
+  scene_count: 10
+  max_hindi_words: 145
+  # Regenerate the script if narration falls outside this window.
+  min_duration_s: 48.0
+  max_duration_s: 62.0
+  max_script_retries: 2
+  # Prepended to every image prompt. Keep it front-loaded and concrete:
+  # trailing style words get ignored, and vague ones ("beautiful", "detailed")
+  # pull the model toward generic painterly output.
+  art_style: >-
+    flat 2D vector cartoon illustration, Amar Chitra Katha Indian comic book
+    art, bold black outlines, flat cel shading, no gradients, bright saturated
+    colors, simple shapes, storybook illustration
+
+audio:
+  voice: hi-IN-SwaraNeural # female storyteller; hi-IN-MadhurNeural for male
+  rate: "+12%"
+  pitch: "+0Hz"
+  # Silence appended after each scene's narration, in seconds.
+  scene_gap_s: 0.25
+
+images:
+  # cloudflare = free Workers AI (10k neurons/day). pollinations = fallback.
+  provider: cloudflare
+  # Cloudflare model id (without the @cf/ prefix).
+  # flux-2-klein-4b supports true 9:16 via multipart + optional ref images.
+  model: black-forest-labs/flux-2-klein-4b
+  # Pollinations-only fallback when provider is pollinations and no token.
+  anonymous_model: dreamshaper
+  # Reliable free-tier 9:16 size for klein. Composer scales to 1080x1920.
+  width: 768
+  height: 1344
+  min_request_interval_s: 0.5
+  max_retries: 4
+
+motion:
+  enabled: true
+  provider: fal # fal | none
+  model: fal-ai/wan-25-preview/image-to-video
+  resolution: 480p
+  clip_seconds: 5
+  # Only the N highest-impact scenes get animated; the rest use Ken Burns.
+  hero_scene_count: 4
+  usd_per_second: 0.05
+  max_cost_usd: 1.20
+  poll_interval_s: 3.0
+  timeout_s: 420
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  transition: fade # fade | none
+  transition_s: 0.3
+
+captions:
+  font_file: assets/fonts/Poppins-Bold.ttf
+  font_name: Poppins
+  font_size: 100
+  # Fraction of frame height for the caption baseline. 0.5 keeps text clear
+  # of the Shorts UI at the bottom and the title area at the top.
+  vertical_position: 0.56
+  max_words_per_group: 4
+  max_group_duration_s: 2.2
+  primary_colour: "&H00FFFFFF&" # white  (ASS is &HAABBGGRR&)
+  highlight_colour: "&H0000E5FF&" # amber
+  outline_colour: "&H00000000&"
+  outline: 5
+  shadow: 2
+  uppercase: true
+
+music:
+  enabled: true
+  directory: assets/music
+  # Voiceover sits on top; music is ducked under it.
+  volume_db: -22
+  duck_db: -8
