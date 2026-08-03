@@ -97,9 +97,3 @@ publish:
       - AkbarBirbal
       - TenaliRaman
       - moralstories
-  instagram:
-    caption_max_chars: 2200
-    r2_prefix: shorts/
-    poll_interval_s: 5.0
-    timeout_s: 600.0
-    graph_version: v21.0

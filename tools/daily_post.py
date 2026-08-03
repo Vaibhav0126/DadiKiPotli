@@ -1,9 +1,9 @@
-"""Pick one story idea and publish a short (YouTube + Instagram).
+"""Pick one story idea and publish a YouTube Short.
 
 Used by the daily GitHub Action:
 
     python -m tools.daily_post
-    python -m tools.daily_post --idea "..." --publish youtube
+    python -m tools.daily_post --idea "..."
     python -m tools.daily_post --no-motion
 
 Reads the first unused line from ideas.txt. On success, moves that line to
@@ -20,15 +20,13 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from google import genai
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from google import genai  # noqa: E402
 
 from src.config import ROOT, Config, load_config  # noqa: E402
 from src.ffmpeg_util import FFmpegError, ensure_available  # noqa: E402
 from src.main import run_pipeline  # noqa: E402
-from src.publish_engine import parse_platforms  # noqa: E402
 
 log = logging.getLogger("daily_post")
 
@@ -64,10 +62,7 @@ def _consume_idea(idea: str) -> None:
     """Remove idea from ideas.txt and append it to ideas_used.txt."""
     queue = _read_queue(IDEAS)
     remaining = [line for line in queue if line != idea]
-    if len(remaining) == len(queue) and idea not in queue:
-        # Generated ideas are not in the queue; still record them as used.
-        pass
-    else:
+    if idea in queue:
         _rewrite_queue(
             IDEAS,
             remaining,
@@ -128,52 +123,9 @@ def next_idea(cfg: Config, override: str | None) -> str:
     return _invent_idea(cfg)
 
 
-def _resolve_platforms(raw: str | None) -> list[str]:
-    """Default to both platforms, dropping any that lack credentials."""
-    wanted = parse_platforms(raw or "youtube,instagram")
-    cfg = load_config()
-    available: list[str] = []
-    for name in wanted:
-        if name == "youtube":
-            token = cfg.youtube_token_path()
-            if token.exists():
-                available.append(name)
-            else:
-                log.warning("skipping youtube: no token at %s", token)
-        elif name == "instagram":
-            if (
-                cfg.meta_access_token
-                and cfg.instagram_user_id
-                and cfg.r2_account_id
-                and cfg.r2_access_key_id
-                and cfg.r2_secret_access_key
-                and cfg.r2_bucket
-                and cfg.r2_public_base_url
-            ):
-                available.append(name)
-            else:
-                log.warning(
-                    "skipping instagram: need META_ACCESS_TOKEN, INSTAGRAM_USER_ID, "
-                    "and full R2_* credentials"
-                )
-    if not available:
-        raise RuntimeError(
-            "No publish platforms available. For YouTube, set secret "
-            "YOUTUBE_TOKEN_JSON. For Instagram, set META_ACCESS_TOKEN, "
-            "INSTAGRAM_USER_ID, and R2_* secrets."
-        )
-    return available
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Daily Hindi short: render + publish")
+    parser = argparse.ArgumentParser(description="Daily Hindi short: render + YouTube")
     parser.add_argument("--idea", help="override the next ideas.txt entry")
-    parser.add_argument(
-        "--publish",
-        default=os.getenv("PUBLISH_PLATFORMS", "youtube,instagram"),
-        metavar="PLATFORMS",
-        help="platforms CSV (default: youtube,instagram)",
-    )
     parser.add_argument(
         "--no-motion",
         action="store_true",
@@ -197,12 +149,12 @@ def main() -> int:
             log.info("FAL_KEY not set; using --no-motion")
         cfg.motion.enabled = False
 
-    try:
-        platforms = _resolve_platforms(args.publish)
-    except ValueError as exc:
-        parser.error(str(exc))
-    except RuntimeError as exc:
-        log.error("%s", exc)
+    if not cfg.youtube_token_path().exists():
+        log.error(
+            "YouTube token missing at %s. Set YOUTUBE_TOKEN_JSON in GitHub "
+            "Actions or run: python -m tools.auth_youtube",
+            cfg.youtube_token_path(),
+        )
         return 1
 
     try:
@@ -212,7 +164,6 @@ def main() -> int:
         return 1
 
     idea = next_idea(cfg, args.idea)
-    log.info("platforms: %s", ",".join(platforms))
     log.info("idea: %s", idea)
 
     try:
@@ -222,7 +173,7 @@ def main() -> int:
             force=False,
             review=False,
             mode="seed",
-            platforms=platforms,
+            publish=True,
         )
     except Exception as exc:  # noqa: BLE001
         log.exception("daily post failed: %s", exc)
