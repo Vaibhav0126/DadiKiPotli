@@ -182,9 +182,11 @@ Workflow: `.github/workflows/daily-post.yml`
 
 - Runs every day at **13:00 JST** (`cron: 0 4 * * *` UTC)
 - Also runnable manually via **Actions → Daily Short → Run workflow**
-- Takes the first line from `ideas.txt`, renders one short, uploads to YouTube,
-  then moves that line to `ideas_used.txt` (committed back to the repo)
-- If `ideas.txt` is empty, Gemini invents a fresh idea
+- Gemini invents a fresh idea each run (avoids anything already in
+  `ideas_used.txt`), renders one short, uploads to YouTube, then records the
+  idea in `ideas_used.txt` (committed back to the repo)
+- Pass an idea in the workflow input, or use `--from-queue` locally to take the
+  next unused line from `ideas.txt` instead
 - Defaults to `--no-motion` (free Ken Burns). Uncheck that on a manual run
   only if `FAL_KEY` is set and you want paid clips
 

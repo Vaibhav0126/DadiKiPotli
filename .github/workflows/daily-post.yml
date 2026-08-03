@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       idea:
-        description: "Optional story idea (otherwise next line in ideas.txt)"
+        description: "Optional story idea (otherwise Gemini invents a fresh one)"
         required: false
         type: string
       no_motion:
