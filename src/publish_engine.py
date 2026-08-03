@@ -1,8 +1,9 @@
-"""Module 5: publish a finished short to YouTube Shorts.
+"""Module 5: publish a finished video to YouTube.
 
-Gated behind `--publish`. Metadata is generated with Gemini and cached at
-`work/<slug>/publish.json`. Platform ids land in `publish_result.json` so a
-re-run can skip uploads that already succeeded.
+Gated behind `--publish`. Shorts get #Shorts metadata; long-form (`publish.format:
+long`) uploads as a standard landscape video. Metadata is generated with Gemini
+and cached at `work/<slug>/publish.json`. Platform ids land in
+`publish_result.json` so a re-run can skip uploads that already succeeded.
 """
 
 from __future__ import annotations
@@ -71,9 +72,9 @@ def _gemini_call(cfg: Config, **kwargs) -> object:
     ) from last_error
 
 
-def _clamp_title(title: str, max_len: int = 100) -> str:
+def _clamp_title(title: str, *, shorts: bool, max_len: int = 100) -> str:
     title = " ".join(title.split())
-    if "#shorts" not in title.lower():
+    if shorts and "#shorts" not in title.lower():
         # Leave room for the hashtag suffix.
         budget = max_len - len(" #Shorts")
         title = title[:budget].rstrip(" -|:")
@@ -83,13 +84,17 @@ def _clamp_title(title: str, max_len: int = 100) -> str:
 
 def _fallback_meta(cfg: Config, story: Story) -> PublishMeta:
     brand = cfg.publish.brand_name
-    title = _clamp_title(story.title_hinglish)
+    shorts = cfg.publish.is_shorts
+    title = _clamp_title(story.title_hinglish, shorts=shorts)
     tags = list(dict.fromkeys([*cfg.publish.youtube.default_tags, brand.replace(" ", "")]))
+    hash_line = f"#{' #'.join(tags)}"
+    if shorts:
+        hash_line += "\n#Shorts"
     description = (
         f"{story.title_hinglish}\n\n"
         f"{story.moral_hinglish}\n\n"
         f"Idea: {story.idea}\n\n"
-        f"#{' #'.join(tags)}\n#Shorts"
+        f"{hash_line}"
     )
     return PublishMeta(
         youtube_title=title,
@@ -105,22 +110,42 @@ def build_metadata(cfg: Config, story: Story, cache_path: Path, *, force: bool) 
         return meta
 
     brand = cfg.publish.brand_name
+    shorts = cfg.publish.is_shorts
     default_tags = ", ".join(cfg.publish.youtube.default_tags)
-    prompt = (
-        f"Write YouTube Shorts metadata for a vertical Hindi animated short.\n\n"
-        f"Brand: {brand}\n"
-        f"Story title (Hinglish): {story.title_hinglish}\n"
-        f"Story title (Hindi): {story.title_hindi}\n"
-        f"Moral (Hinglish): {story.moral_hinglish}\n"
-        f"Original idea: {story.idea}\n"
-        f"Suggested tags to include: {default_tags}\n\n"
-        f"Rules:\n"
-        f"- youtube_title: catchy Hinglish, max 90 chars before hashtag, must work as a Shorts title.\n"
-        f"- youtube_description: 2-4 short lines + moral tease + hashtags. Include #Shorts.\n"
-        f"- youtube_tags: 8-12 lowercase-ish keywords, no # signs.\n"
-        f"- No spoilers of the twist ending.\n"
-        f"- Do not invent fake URLs or @handles."
-    )
+    if shorts:
+        prompt = (
+            f"Write YouTube Shorts metadata for a vertical Hindi animated short.\n\n"
+            f"Brand: {brand}\n"
+            f"Story title (Hinglish): {story.title_hinglish}\n"
+            f"Story title (Hindi): {story.title_hindi}\n"
+            f"Moral (Hinglish): {story.moral_hinglish}\n"
+            f"Original idea: {story.idea}\n"
+            f"Suggested tags to include: {default_tags}\n\n"
+            f"Rules:\n"
+            f"- youtube_title: catchy Hinglish, max 90 chars before hashtag, must work as a Shorts title.\n"
+            f"- youtube_description: 2-4 short lines + moral tease + hashtags. Include #Shorts.\n"
+            f"- youtube_tags: 8-12 lowercase-ish keywords, no # signs.\n"
+            f"- No spoilers of the twist ending.\n"
+            f"- Do not invent fake URLs or @handles."
+        )
+    else:
+        prompt = (
+            f"Write YouTube metadata for a 16:9 landscape Hindi animated folk tale "
+            f"(about 6+ minutes, NOT a Short — do not use #Shorts).\n\n"
+            f"Brand: {brand}\n"
+            f"Story title (Hinglish): {story.title_hinglish}\n"
+            f"Story title (Hindi): {story.title_hindi}\n"
+            f"Moral (Hinglish): {story.moral_hinglish}\n"
+            f"Original idea: {story.idea}\n"
+            f"Suggested tags to include: {default_tags}\n\n"
+            f"Rules:\n"
+            f"- youtube_title: catchy Hinglish, max 100 chars, no #Shorts.\n"
+            f"- youtube_description: 4-8 lines with a hook, soft moral tease, and hashtags. "
+            f"Never include #Shorts or the word Shorts.\n"
+            f"- youtube_tags: 8-12 keywords, no # signs, no Shorts.\n"
+            f"- No spoilers of the twist ending.\n"
+            f"- Do not invent fake URLs or @handles."
+        )
 
     try:
         resp = _gemini_call(
@@ -141,7 +166,7 @@ def build_metadata(cfg: Config, story: Story, cache_path: Path, *, force: bool) 
 
     meta = meta.model_copy(
         update={
-            "youtube_title": _clamp_title(meta.youtube_title),
+            "youtube_title": _clamp_title(meta.youtube_title, shorts=shorts),
             "youtube_tags": list(
                 dict.fromkeys([*meta.youtube_tags, *cfg.publish.youtube.default_tags])
             ),

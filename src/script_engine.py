@@ -64,7 +64,8 @@ def _call(cfg: Config, **kwargs) -> object:
 
 
 def _system_prompt(cfg: Config) -> str:
-    tmpl = (ROOT / "prompts" / "story_system.md").read_text(encoding="utf-8")
+    path = ROOT / cfg.story.prompt_file
+    tmpl = path.read_text(encoding="utf-8")
     return tmpl.replace("{scene_count}", str(cfg.story.scene_count)).replace(
         "{max_words}", str(cfg.story.max_hindi_words)
     )
@@ -174,7 +175,7 @@ def build_scene_image_prompt(cfg: Config, story: Story, scene: Scene) -> str:
         char = next((c for c in story.characters if c.name == name), None)
         if char:
             parts.append(char.visual_description.rstrip(". "))
-    parts.append("vertical 9:16 composition, no text, no letters, no watermark")
+    parts.append(f"{cfg.story.aspect_label}, no text, no letters, no watermark")
     return ". ".join(p for p in parts if p)
 
 
@@ -221,11 +222,12 @@ def revise_for_duration(cfg: Config, story: Story, measured: float) -> Story:
     direction = "shorter" if measured > cfg.story.max_duration_s else "longer"
     ratio = target / measured if measured else 1.0
     words = sum(len(tokenize(s.hindi_narration)) for s in story.scenes)
+    lo, hi = cfg.story.min_duration_s, cfg.story.max_duration_s
     nudge = (
         f"A previous version of this story was narrated aloud and ran {measured:.1f} "
-        f"seconds, which is outside the 50-60 second target. Write it {direction}: aim "
-        f"for about {int(words * ratio)} Hindi words total. Keep the same beats and the "
-        "same twist."
+        f"seconds, which is outside the {lo:.0f}-{hi:.0f} second target. Write it "
+        f"{direction}: aim for about {int(words * ratio)} Hindi words total. Keep the "
+        "same beats and the same twist."
     )
     draft = _generate_draft(cfg, story.idea, nudge)
     draft = _enforce_parity(cfg, draft)

@@ -170,10 +170,20 @@ def run_pipeline(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Hindi story Shorts pipeline")
+    parser = argparse.ArgumentParser(description="Hindi story video pipeline")
     parser.add_argument("idea", nargs="?", help="one-line story idea")
     parser.add_argument("--batch", type=Path, help="file of story ideas, one per line")
     parser.add_argument("--check", action="store_true", help="run preflight checks and exit")
+    parser.add_argument(
+        "--profile",
+        default="short",
+        help="config profile: short (config.yaml) or long (config.long.yaml)",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="explicit config yaml path (overrides --profile)",
+    )
     parser.add_argument("--force", action="store_true", help="ignore cached script and audio")
     parser.add_argument("--review", action="store_true", help="pause for QC before paid animation")
     parser.add_argument("--no-motion", action="store_true", help="Ken Burns only, spend nothing")
@@ -184,14 +194,14 @@ def main() -> int:
     parser.add_argument(
         "--publish",
         action="store_true",
-        help="after render, upload to YouTube Shorts",
+        help="after render, upload to YouTube",
     )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
     _setup_logging(args.verbose)
 
-    cfg = load_config()
+    cfg = load_config(path=args.config, profile=args.profile)
     if args.no_motion:
         cfg.motion.enabled = False
 

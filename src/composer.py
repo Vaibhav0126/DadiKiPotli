@@ -158,8 +158,9 @@ def mix_audio(cfg: Config, voice: Path, music: Path | None, duration: float, des
         )
         return
 
-    # The music bed is ducked by the narration rather than sitting at a fixed
-    # level, so it can be louder in the gaps without ever fighting the voice.
+    # The music bed loops for the full narration length and is ducked by the
+    # voice rather than sitting at a fixed level, so it can be louder in the
+    # gaps without fighting the narrator.
     graph = (
         "[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=2[v1][v2];"
         f"[1:a]aformat=sample_rates=48000:channel_layouts=stereo,"

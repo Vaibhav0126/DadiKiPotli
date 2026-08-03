@@ -29,6 +29,10 @@ class StoryCfg(BaseModel):
     max_duration_s: float = 62.0
     max_script_retries: int = 2
     art_style: str = ""
+    # Relative to project root. short vs long use different story shapes.
+    prompt_file: str = "prompts/story_system.md"
+    # Appended to every image prompt so the model frames for the output ratio.
+    aspect_label: str = "vertical 9:16 composition"
 
 
 class AudioCfg(BaseModel):
@@ -92,7 +96,7 @@ class CaptionsCfg(BaseModel):
 class MusicCfg(BaseModel):
     enabled: bool = True
     directory: str = "assets/music"
-    volume_db: float = -22.0
+    volume_db: float = -25.0
     duck_db: float = -8.0
 
 
@@ -110,7 +114,13 @@ class YouTubePublishCfg(BaseModel):
 
 class PublishCfg(BaseModel):
     brand_name: str = "Hindi Stories"
+    # short → #Shorts metadata; long → standard YouTube upload (no #Shorts).
+    format: str = "short"  # short | long
     youtube: YouTubePublishCfg = YouTubePublishCfg()
+
+    @property
+    def is_shorts(self) -> bool:
+        return self.format.strip().lower() != "long"
 
 
 class Config(BaseModel):
@@ -168,9 +178,24 @@ class Config(BaseModel):
         return ROOT / self.music.directory
 
 
-def load_config(path: Path | None = None) -> Config:
+def resolve_config_path(profile: str | None = None, path: Path | None = None) -> Path:
+    """Map --profile / --config to a yaml file under the project root."""
+    if path is not None:
+        return path if path.is_absolute() else ROOT / path
+    name = (profile or "short").strip().lower()
+    if name in {"", "short", "shorts", "default"}:
+        return ROOT / "config.yaml"
+    candidate = ROOT / f"config.{name}.yaml"
+    if not candidate.exists():
+        raise FileNotFoundError(
+            f"Unknown profile {profile!r}: expected {candidate.name} next to config.yaml"
+        )
+    return candidate
+
+
+def load_config(path: Path | None = None, profile: str | None = None) -> Config:
     load_dotenv(ROOT / ".env")
-    cfg_path = path or ROOT / "config.yaml"
+    cfg_path = resolve_config_path(profile=profile, path=path)
     raw: dict[str, Any] = {}
     if cfg_path.exists():
         raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}

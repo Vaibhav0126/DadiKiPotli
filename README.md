@@ -190,6 +190,30 @@ Workflow: `.github/workflows/daily-post.yml`
 - Defaults to `--no-motion` (free Ken Burns). Uncheck that on a manual run
   only if `FAL_KEY` is set and you want paid clips
 
+## Sunday long-form (2pm JST)
+
+Workflow: `.github/workflows/sunday-long.yml`
+
+- Runs every **Sunday at 14:00 JST** (`cron: 0 5 * * 0` UTC)
+- 16:9 landscape (`1920x1080`), **at least 6 minutes** (`config.long.yaml`)
+- Invents a fresh idea by default (tracked in `ideas_long_used.txt`); optional
+  backlog in `ideas_long.txt` via `--from-queue`
+- Publishes as a normal YouTube video (no `#Shorts`)
+- Manual run: **Actions → Sunday Long → Run workflow**
+
+Local equivalents:
+
+```bash
+# daily short
+.venv/bin/python -m tools.daily_post --no-motion
+
+# sunday long-form
+.venv/bin/python -m tools.daily_post --profile long --no-motion
+
+# one-off long render without uploading
+.venv/bin/python -m src.main "..." --profile long --no-motion
+```
+
 ### Secrets to add
 
 Repo → **Settings → Secrets and variables → Actions**. Paste values from your
@@ -208,23 +232,26 @@ Quick local check of the same entrypoint:
 
 ```bash
 .venv/bin/python -m tools.daily_post --no-motion
+.venv/bin/python -m tools.daily_post --profile long --no-motion
 ```
 
 ## Tuning
 
-Everything lives in `config.yaml`.
+Everything lives in `config.yaml` (Shorts) or `config.long.yaml` (`--profile long`).
 
 - **Length** — `story.min_duration_s` / `max_duration_s`. The script is
   regenerated if the narrated audio misses the window.
-- **Voice** — `audio.voice`. Default is `hi-IN-SwaraNeural` (female storyteller)
-  at `+16%`. Use `hi-IN-MadhurNeural` for male.
+- **Music** — `music.volume_db` (default **-25**). Tracks in `assets/music/`
+  loop for the full video length and duck under narration.
+- **Voice** — `audio.voice`. Default is `hi-IN-SwaraNeural` (female storyteller).
+  Use `hi-IN-MadhurNeural` for male.
 - **Spend** — `motion.hero_scene_count` and `motion.max_cost_usd`. The cap is
   checked before each call, and blowing it degrades to Ken Burns rather than
   failing the run.
 - **Art style** — `story.art_style`. Put style words early; image models weight
   leading tokens far more heavily than trailing ones.
-- **Captions** — `captions.font_size`, `vertical_position` (0.56 keeps text
-  clear of the Shorts UI), and `max_words_per_group`.
+- **Captions** — `captions.font_size`, `vertical_position` (0.56 for Shorts UI;
+  0.88 for landscape), and `max_words_per_group`.
 
 ## Testing
 
@@ -258,13 +285,16 @@ Things that are true now and were not obvious:
 ## Layout
 
 ```
-config.yaml          all tuning
-prompts/             the story system prompt
+config.yaml          Shorts tuning (9:16, ~60s)
+config.long.yaml     Sunday long-form (16:9, ≥6 min)
+prompts/             short + long story system prompts
 src/                 the five modules + orchestrator
-tools/               smoke test, probes, YouTube OAuth
+tools/               smoke test, probes, YouTube OAuth, daily_post
 secrets/             YouTube OAuth client + token (gitignored)
 assets/fonts/        caption font
-assets/music/        background tracks (yours)
+assets/music/        background tracks (looped under voice)
 work/<slug>/         intermediates, resumable
-output/<slug>.mp4    the finished short
+output/<slug>.mp4    the finished video
+ideas.txt            daily Shorts queue
+ideas_long.txt       Sunday long-form queue
 ```

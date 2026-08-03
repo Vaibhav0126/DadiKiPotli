@@ -1,0 +1,93 @@
+# Sunday long-form profile: 16:9 landscape, at least 6 minutes.
+# Load with: python -m src.main "..." --profile long
+# Or:        python -m tools.daily_post --profile long
+
+story:
+  models:
+    - gemini-3.5-flash
+    - gemini-3-flash
+    - gemini-3.1-flash-lite
+    - gemini-2.0-flash
+    - gemini-flash-latest
+  scene_count: 36
+  # Ceiling only; duration window below is the real target after TTS.
+  max_hindi_words: 1200
+  min_duration_s: 360.0
+  max_duration_s: 480.0
+  max_script_retries: 3
+  prompt_file: prompts/story_system_long.md
+  aspect_label: horizontal 16:9 composition
+  art_style: >-
+    flat 2D vector cartoon illustration, Amar Chitra Katha Indian comic book
+    art, bold black outlines, flat cel shading, no gradients, bright saturated
+    colors, simple shapes, storybook illustration
+
+audio:
+  voice: hi-IN-SwaraNeural
+  rate: "+8%"
+  pitch: "+0Hz"
+  scene_gap_s: 0.35
+
+images:
+  provider: cloudflare
+  model: black-forest-labs/flux-2-klein-4b
+  anonymous_model: dreamshaper
+  # Reliable free-tier 16:9 size for klein. Composer scales to 1920x1080.
+  width: 1344
+  height: 768
+  min_request_interval_s: 0.5
+  max_retries: 4
+
+motion:
+  enabled: true
+  provider: fal
+  model: fal-ai/wan-25-preview/image-to-video
+  resolution: 480p
+  clip_seconds: 5
+  hero_scene_count: 6
+  usd_per_second: 0.05
+  max_cost_usd: 1.50
+  poll_interval_s: 3.0
+  timeout_s: 420
+
+video:
+  width: 1920
+  height: 1080
+  fps: 30
+  transition: fade
+  transition_s: 0.4
+
+captions:
+  font_file: assets/fonts/Poppins-Bold.ttf
+  font_name: Poppins
+  font_size: 72
+  # Near the bottom of a landscape frame, clear of typical player chrome.
+  vertical_position: 0.88
+  max_words_per_group: 5
+  max_group_duration_s: 2.4
+  primary_colour: "&H00FFFFFF&"
+  highlight_colour: "&H0000E5FF&"
+  outline_colour: "&H00000000&"
+  outline: 4
+  shadow: 2
+  uppercase: true
+
+music:
+  enabled: true
+  directory: assets/music
+  volume_db: -25
+  duck_db: -8
+
+publish:
+  brand_name: Hindi Stories
+  format: long
+  youtube:
+    privacy: public
+    category_id: "24"
+    default_tags:
+      - HindiStories
+      - AkbarBirbal
+      - TenaliRaman
+      - moralstories
+      - HindiKahani
+      - Folktale

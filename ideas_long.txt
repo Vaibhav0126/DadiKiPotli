@@ -1,0 +1,7 @@
+# Optional backlog of long-form story ideas (one per line).
+# Used only with: python -m tools.daily_post --profile long --from-queue
+# Sunday Action invents a fresh idea by default.
+
+Akbar asks Birbal to find the most foolish man in the entire kingdom
+Tenali Raman is ordered to paint a portrait that looks exactly like the king — but better
+Vikram must answer Betaal's riddle about a merchant who cheated his own brother
