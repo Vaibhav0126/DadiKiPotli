@@ -57,13 +57,13 @@ python3 -m venv .venv
 cp .env.example .env
 ```
 
-| Key | Needed for | Cost |
-|---|---|---|
-| `GEMINI_API_KEY` | Module 1 | Free tier, ~1,500 requests/day. [Get one](https://aistudio.google.com/apikey) |
-| `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` | Module 3a | Free 10k neurons/day. [Dashboard](https://dash.cloudflare.com/) |
-| `FAL_KEY` | Module 3b only | ~$0.40-1.00 per video. [Get one](https://fal.ai/dashboard/keys) |
-| `POLLINATIONS_TOKEN` | Module 3a fallback | Optional; only if `images.provider: pollinations` |
-| YouTube OAuth (`secrets/` + `tools.auth_youtube`) | Module 5 `--publish` | Free (quota limits apply) |
+| Key                                               | Needed for           | Cost                                                                          |
+| ------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`                                  | Module 1             | Free tier, ~1,500 requests/day. [Get one](https://aistudio.google.com/apikey) |
+| `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`  | Module 3a            | Free 10k neurons/day. [Dashboard](https://dash.cloudflare.com/)               |
+| `FAL_KEY`                                         | Module 3b only       | ~$0.40-1.00 per video. [Get one](https://fal.ai/dashboard/keys)               |
+| `POLLINATIONS_TOKEN`                              | Module 3a fallback   | Optional; only if `images.provider: pollinations`                             |
+| YouTube OAuth (`secrets/` + `tools.auth_youtube`) | Module 5 `--publish` | Free (quota limits apply)                                                     |
 
 Run with `--no-motion` and you never need `FAL_KEY` at all. Skip `--publish`
 and you never need YouTube credentials.
@@ -133,24 +133,22 @@ You need a Google account that owns (or can upload to) the YouTube channel.
 secrets/youtube_client_secret.json
 ```
 
-   (The filename must match `YOUTUBE_CLIENT_SECRETS` in `.env`, which defaults
-   to that path.)
-6. From the project root, authorize once in a browser:
+(The filename must match `YOUTUBE_CLIENT_SECRETS` in `.env`, which defaults
+to that path.) 6. From the project root, authorize once in a browser:
 
 ```bash
 .venv/bin/python -m tools.auth_youtube
 ```
 
-   Sign in with the Google account that owns the channel, accept upload access.
-   This writes `secrets/youtube_token.json` (gitignored). Re-run if you revoke
-   access or delete the token file.
-7. Confirm:
+Sign in with the Google account that owns the channel, accept upload access.
+This writes `secrets/youtube_token.json` (gitignored). Re-run if you revoke
+access or delete the token file. 7. Confirm:
 
 ```bash
 .venv/bin/python -m src.main --check
 ```
 
-   `youtube auth` should show `ok`. Then try:
+`youtube auth` should show `ok`. Then try:
 
 ```bash
 .venv/bin/python -m src.main "Akbar asks Birbal for an honest answer" --publish
@@ -219,14 +217,14 @@ Local equivalents:
 Repo → **Settings → Secrets and variables → Actions**. Paste values from your
 local `.env` / `secrets/` files:
 
-| Secret | Required for | Notes |
-|---|---|---|
-| `GEMINI_API_KEY` | always | script + publish metadata |
-| `CLOUDFLARE_ACCOUNT_ID` | images | Workers AI |
-| `CLOUDFLARE_API_TOKEN` | images | Workers AI |
-| `YOUTUBE_TOKEN_JSON` | YouTube | **full contents** of `secrets/youtube_token.json` after `python -m tools.auth_youtube` |
-| `YOUTUBE_CLIENT_SECRET_JSON` | YouTube (optional) | full contents of `secrets/youtube_client_secret.json` |
-| `FAL_KEY` | motion only | optional; leave unset for free Ken Burns |
+| Secret                       | Required for       | Notes                                                                                  |
+| ---------------------------- | ------------------ | -------------------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`             | always             | script + publish metadata                                                              |
+| `CLOUDFLARE_ACCOUNT_ID`      | images             | Workers AI                                                                             |
+| `CLOUDFLARE_API_TOKEN`       | images             | Workers AI                                                                             |
+| `YOUTUBE_TOKEN_JSON`         | YouTube            | **full contents** of `secrets/youtube_token.json` after `python -m tools.auth_youtube` |
+| `YOUTUBE_CLIENT_SECRET_JSON` | YouTube (optional) | full contents of `secrets/youtube_client_secret.json`                                  |
+| `FAL_KEY`                    | motion only        | optional; leave unset for free Ken Burns                                               |
 
 Quick local check of the same entrypoint:
 
@@ -274,7 +272,7 @@ Things that are true now and were not obvious:
   event for a whole sentence, which silently collapses captions onto evenly
   spaced timings. `boundary="WordBoundary"` restores per-word timings.
 - **`zoompan` needs `d=1`.** The intuitive `d=<total frames>` makes it emit a
-  whole clip per *input* frame, and with `-loop 1` feeding it endlessly that is
+  whole clip per _input_ frame, and with `-loop 1` feeding it endlessly that is
   about 50x redundant work: 154 seconds versus 3 for one 4-second segment. Its
   `fps` also defaults to 25 and must be set, or segments drift out of sync.
 - **Captions are Hinglish, deliberately.** Burning Devanagari needs a

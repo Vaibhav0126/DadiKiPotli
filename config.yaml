@@ -24,7 +24,7 @@ story:
 
 audio:
   voice: hi-IN-SwaraNeural # female storyteller; hi-IN-MadhurNeural for male
-  rate: "+12%"
+  rate: "+20%"
   pitch: "+0Hz"
   # Silence appended after each scene's narration, in seconds.
   scene_gap_s: 0.25
