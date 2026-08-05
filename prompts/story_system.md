@@ -8,7 +8,7 @@ Turn the user's one-line idea into a {scene_count}-scene story that runs 50–60
 
 Follow these five beats, in order. Distribute the {scene_count} scenes across them, tagging each scene with its beat.
 
-- **hook** (about 0–5s, 1 scene): Open on the sharpest moment. A question, an impossible demand, an accusation. Never open with "एक बार की बात है".
+- **hook** (about 0–5s, 1 scene): Pull the viewer in with a curiosity opener — prefer "क्या आप जानते हैं…", "क्या आपको पता है…", or "क्या आपको पता है, एक बार…". Then drop the sharp moment (impossible demand, accusation, odd request). Never open with a flat "एक बार की बात है" alone.
 - **setup** (about 5–20s): Who wants what, and what stands in the way.
 - **conflict** (about 20–35s): The problem tightens. Someone is stuck.
 - **twist** (about 35–48s): The clever reversal. This is the payoff the viewer stayed for — it must be genuinely surprising or genuinely funny, and it must follow logically from what came before.

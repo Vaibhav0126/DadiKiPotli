@@ -15,8 +15,8 @@ idea
  └─> Module 1  script_engine    Gemini writes the story as structured JSON:
  │                              Devanagari narration (for TTS) + word-for-word
  │                              Hinglish (for captions) + image prompts
- └─> Module 2  audio_engine     edge-tts narrates each scene separately and
- │                              reports per-word timings
+ └─> Module 2  audio_engine     Gemini TTS narrates each scene separately;
+ │                              caption timings are spread across measured duration
  └─> Module 3a visual_engine    Cloudflare Workers AI generates one still per scene
  └─> Module 3b motion_engine    the 4 highest-impact scenes become real video
  │                              clips; everything else gets a Ken Burns move
@@ -59,7 +59,7 @@ cp .env.example .env
 
 | Key                                               | Needed for           | Cost                                                                          |
 | ------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------- |
-| `GEMINI_API_KEY`                                  | Module 1             | Free tier, ~1,500 requests/day. [Get one](https://aistudio.google.com/apikey) |
+| `GEMINI_API_KEY`                                  | Module 1 + 2         | Script + Gemini TTS. [Get one](https://aistudio.google.com/apikey) |
 | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`  | Module 3a            | Free 10k neurons/day. [Dashboard](https://dash.cloudflare.com/)               |
 | `FAL_KEY`                                         | Module 3b only       | ~$0.40-1.00 per video. [Get one](https://fal.ai/dashboard/keys)               |
 | `POLLINATIONS_TOKEN`                              | Module 3a fallback   | Optional; only if `images.provider: pollinations`                             |
@@ -219,7 +219,7 @@ local `.env` / `secrets/` files:
 
 | Secret                       | Required for       | Notes                                                                                  |
 | ---------------------------- | ------------------ | -------------------------------------------------------------------------------------- |
-| `GEMINI_API_KEY`             | always             | script + publish metadata                                                              |
+| `GEMINI_API_KEY`             | always             | script + Gemini TTS + publish metadata                                                     |
 | `CLOUDFLARE_ACCOUNT_ID`      | images             | Workers AI                                                                             |
 | `CLOUDFLARE_API_TOKEN`       | images             | Workers AI                                                                             |
 | `YOUTUBE_TOKEN_JSON`         | YouTube            | **full contents** of `secrets/youtube_token.json` after `python -m tools.auth_youtube` |
@@ -241,8 +241,9 @@ Everything lives in `config.yaml` (Shorts) or `config.long.yaml` (`--profile lon
   regenerated if the narrated audio misses the window.
 - **Music** — `music.volume_db` (default **-25**). Tracks in `assets/music/`
   loop for the full video length and duck under narration.
-- **Voice** — `audio.voice`. Default is `hi-IN-SwaraNeural` (female storyteller).
-  Use `hi-IN-MadhurNeural` for male.
+- **Voice** — `audio.voice` (Gemini prebuilt voice). Default is `Sulafat`
+  (warm storyteller). Try `Achird` (friendly), `Achernar` (soft), or `Kore`
+  (firm). Steer delivery with `audio.style_prompt`.
 - **Spend** — `motion.hero_scene_count` and `motion.max_cost_usd`. The cap is
   checked before each call, and blowing it degrades to Ken Burns rather than
   failing the run.
@@ -268,9 +269,9 @@ Things that are true now and were not obvious:
 - **Gemini cannot generate the images.** Every Nano Banana image model shows
   "Free Tier: Not available". Gemini text is still free, which is why it writes
   the script and nothing else.
-- **edge-tts defaults to `SentenceBoundary`.** Left alone it returns one timing
-  event for a whole sentence, which silently collapses captions onto evenly
-  spaced timings. `boundary="WordBoundary"` restores per-word timings.
+- **Gemini TTS returns no word boundaries.** Captions are timed by spreading
+  evenly across each scene's measured speech duration. Module 1's Hindi /
+  Hinglish word-count parity is what keeps them lined up.
 - **`zoompan` needs `d=1`.** The intuitive `d=<total frames>` makes it emit a
   whole clip per _input_ frame, and with `-loop 1` feeding it endlessly that is
   about 50x redundant work: 154 seconds versus 3 for one 4-second segment. Its

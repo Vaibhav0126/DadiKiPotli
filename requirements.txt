@@ -1,8 +1,5 @@
-# LLM (Module 1) - free tier
+# LLM + TTS (Modules 1 & 2)
 google-genai>=1.0.0
-
-# TTS (Module 2) - 7.2.7+ required, older versions 403 on Microsoft's rotated tokens
-edge-tts>=7.2.7
 
 # HTTP (Modules 3a/3b)
 httpx>=0.28.0

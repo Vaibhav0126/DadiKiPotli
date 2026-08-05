@@ -1,8 +1,8 @@
-"""Quick narration + music mix with zero paid / free-tier AI credits.
+"""Quick narration + music mix for tuning ducking levels.
 
-Uses a hardcoded Hindi script (no Gemini), edge-tts (free), and the local
+Uses a hardcoded Hindi script (no story LLM), Gemini TTS, and the local
 music bed. Useful for tuning music.volume_db / duck_db without burning
-Cloudflare neurons or fal spend.
+Cloudflare neurons or fal spend. Still needs GEMINI_API_KEY for voice.
 
     .venv/bin/python -m tools.test_audio_mix
     .venv/bin/python -m tools.test_audio_mix --volume-db -18
@@ -90,7 +90,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
 
     story = _story()
-    log.info("synthesizing narration via edge-tts (free)…")
+    log.info("synthesizing narration via Gemini TTS…")
     scenes = audio_engine.generate_audio(cfg, story, work / "audio")
     duration = audio_engine.total_duration(scenes)
     log.info("narration total: %.1fs", duration)

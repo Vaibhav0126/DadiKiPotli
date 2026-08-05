@@ -51,8 +51,8 @@ class Scene(BaseModel):
     def parity_ok(self) -> bool:
         """Whether caption tokens line up 1:1 with narration tokens.
 
-        Caption timings come from edge-tts word boundaries measured against
-        the Devanagari, so index i of each must refer to the same word.
+        Caption timings are spread across measured speech duration from
+        Gemini TTS, so index i of each must refer to the same word.
         """
         return len(tokenize(self.hindi_narration)) == len(tokenize(self.hinglish_caption))
 

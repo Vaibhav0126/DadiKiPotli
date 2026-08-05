@@ -36,9 +36,22 @@ class StoryCfg(BaseModel):
 
 
 class AudioCfg(BaseModel):
-    voice: str = "hi-IN-MadhurNeural"
-    rate: str = "+8%"
-    pitch: str = "+0Hz"
+    # Tried in order; first reachable Gemini TTS model is remembered.
+    models: list[str] = [
+        "gemini-3.1-flash-tts-preview",
+        "gemini-2.5-flash-preview-tts",
+        "gemini-2.5-pro-preview-tts",
+    ]
+    # Prebuilt Gemini voice. Sulafat = warm storyteller; Achird = friendly;
+    # Kore = firm; Achernar = soft. Full list in Gemini TTS docs.
+    voice: str = "Sulafat"
+    language_code: str = "hi"
+    # Director's note wrapped around each scene's Devanagari. Leave empty to
+    # speak the narration with no style steering.
+    style_prompt: str = (
+        "Speak warmly and naturally as a Hindi YouTube storyteller. "
+        "Conversational and engaging, not robotic. Recite exactly:"
+    )
     scene_gap_s: float = 0.25
 
 

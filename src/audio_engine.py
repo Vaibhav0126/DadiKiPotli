@@ -5,19 +5,23 @@ each scene's duration an exact measured fact instead of something inferred by
 splitting a single track, and it lets the composer lay out the timeline
 without any alignment guesswork.
 
-edge-tts reports word boundaries against the *Devanagari* text. Those timings
-are transferred onto the Hinglish caption tokens here, via a character-level
-alignment that tolerates the boundary stream not landing 1:1 on whitespace
-tokens (which happens around punctuation, numerals and conjuncts).
+Gemini TTS returns raw PCM (no word-boundary stream), so caption timings are
+spread evenly across the measured speech duration. That is close enough for
+karaoke grouping; the important invariant is still Module 1's Hindi/Hinglish
+token parity.
 """
 
 from __future__ import annotations
 
-import asyncio
+import base64
 import logging
+import re
+import time
+import wave
 from pathlib import Path
 
-import edge_tts
+from google import genai
+from google.genai import types
 
 from .config import Config
 from .ffmpeg_util import probe_duration
@@ -25,8 +29,10 @@ from .models import SceneAudio, Story, WordTiming, tokenize
 
 log = logging.getLogger(__name__)
 
-# edge-tts reports offsets in 100-nanosecond ticks.
-TICKS_PER_SECOND = 10_000_000
+_RATE_IN_MIME = re.compile(r"rate=(\d+)", re.IGNORECASE)
+
+# Remember which TTS model worked this process; same pattern as script_engine.
+_active_tts_model: str | None = None
 
 
 class Boundary:
@@ -38,45 +44,109 @@ class Boundary:
         self.end = end
 
 
-async def _synthesize(
-    cfg: Config, text: str, dest: Path, attempts: int = 3
-) -> list[Boundary]:
+def _client(cfg: Config) -> genai.Client:
+    return genai.Client(api_key=cfg.gemini_api_key)
+
+
+def _is_missing_model(exc: Exception) -> bool:
+    text = str(exc)
+    return "NOT_FOUND" in text or "404" in text or "not available" in text
+
+
+def _pcm_bytes(data: bytes | str) -> bytes:
+    if isinstance(data, str):
+        return base64.b64decode(data)
+    return data
+
+
+def _sample_rate(mime_type: str | None) -> int:
+    if mime_type:
+        match = _RATE_IN_MIME.search(mime_type)
+        if match:
+            return int(match.group(1))
+    return 24000
+
+
+def _write_wav(dest: Path, pcm: bytes, sample_rate: int) -> None:
+    with wave.open(str(dest), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm)
+
+
+def _tts_contents(cfg: Config, text: str) -> str:
+    """Wrap narration in a short director's note so Gemini sounds storyteller-like.
+
+    The quoted block is the only spoken content; the lead-in steers delivery.
+    """
+    style = (cfg.audio.style_prompt or "").strip()
+    if not style:
+        return text
+    return f'{style}\n"{text}"'
+
+
+def _synthesize(cfg: Config, text: str, dest: Path, attempts: int = 3) -> list[Boundary]:
+    """Call Gemini TTS and write a mono WAV. Returns no word boundaries."""
+    global _active_tts_model
+
+    candidates = [_active_tts_model] if _active_tts_model else list(cfg.audio.models)
     last_error: Exception | None = None
-    for attempt in range(attempts):
-        audio = bytearray()
-        boundaries: list[Boundary] = []
-        try:
-            comm = edge_tts.Communicate(
-                text,
-                voice=cfg.audio.voice,
-                rate=cfg.audio.rate,
-                pitch=cfg.audio.pitch,
-                # edge-tts 7.x defaults to SentenceBoundary, which yields one
-                # event for the whole scene and would force captions onto
-                # evenly-spaced timings. Word granularity is still available,
-                # it just has to be asked for.
-                boundary="WordBoundary",
+
+    speech_config = types.SpeechConfig(
+        language_code=cfg.audio.language_code or None,
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name=cfg.audio.voice,
             )
-            async for chunk in comm.stream():
-                if chunk["type"] == "audio":
-                    audio.extend(chunk["data"])
-                elif chunk["type"] == "WordBoundary":
-                    start = chunk["offset"] / TICKS_PER_SECOND
-                    end = start + chunk["duration"] / TICKS_PER_SECOND
-                    boundaries.append(Boundary(chunk["text"], start, end))
-            if not audio:
-                raise RuntimeError("edge-tts returned no audio")
-            dest.write_bytes(bytes(audio))
-            return boundaries
-        except Exception as exc:  # noqa: BLE001 - retried, then re-raised below
-            last_error = exc
-            wait = 2**attempt
-            log.warning("edge-tts attempt %d failed (%s), retrying in %ss", attempt + 1, exc, wait)
-            await asyncio.sleep(wait)
+        ),
+    )
+    contents = _tts_contents(cfg, text)
+
+    for model in candidates:
+        for attempt in range(attempts):
+            try:
+                # Keep a strong reference: google-genai closes its httpx client
+                # on GC, and a one-liner Client() call can die mid-request.
+                client = _client(cfg)
+                resp = client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["AUDIO"],
+                        speech_config=speech_config,
+                    ),
+                )
+                part = resp.candidates[0].content.parts[0]
+                inline = part.inline_data
+                if inline is None or not inline.data:
+                    raise RuntimeError("Gemini TTS returned no audio data")
+                pcm = _pcm_bytes(inline.data)
+                if not pcm:
+                    raise RuntimeError("Gemini TTS returned empty PCM")
+                _write_wav(dest, pcm, _sample_rate(inline.mime_type))
+                if _active_tts_model != model:
+                    log.info("using Gemini TTS model: %s (%s)", model, cfg.audio.voice)
+                    _active_tts_model = model
+                return []
+            except Exception as exc:  # noqa: BLE001 - retried / model-fallback
+                last_error = exc
+                if _is_missing_model(exc):
+                    log.debug("TTS model %s unavailable, trying next", model)
+                    break
+                wait = 2**attempt
+                log.warning(
+                    "Gemini TTS attempt %d on %s failed (%s), retrying in %ss",
+                    attempt + 1,
+                    model,
+                    exc,
+                    wait,
+                )
+                time.sleep(wait)
 
     raise RuntimeError(
-        f"edge-tts failed after {attempts} attempts: {last_error}. "
-        "If this is a 403, upgrade with: pip install -U 'edge-tts>=7.2.7'"
+        f"Gemini TTS failed after trying {', '.join(cfg.audio.models)}: {last_error}. "
+        "Check GEMINI_API_KEY and audio.models / audio.voice in config.yaml."
     ) from last_error
 
 
@@ -90,7 +160,8 @@ def _align(
 
     Boundary text and source tokens are flattened into one character stream so
     that a boundary spanning two tokens, or two boundaries covering one token,
-    both resolve correctly.
+    both resolve correctly. With Gemini TTS, boundaries is usually empty and
+    this falls through to even spacing across the measured duration.
     """
     if not target_tokens:
         return []
@@ -157,14 +228,14 @@ def _align(
     return timings
 
 
-async def _build(cfg: Config, story: Story, out_dir: Path) -> list[SceneAudio]:
+def _build(cfg: Config, story: Story, out_dir: Path) -> list[SceneAudio]:
     out_dir.mkdir(parents=True, exist_ok=True)
     scenes: list[SceneAudio] = []
     cursor = 0.0
 
     for scene in story.scenes:
-        dest = out_dir / f"scene_{scene.scene_number:02d}.mp3"
-        boundaries = await _synthesize(cfg, scene.hindi_narration, dest)
+        dest = out_dir / f"scene_{scene.scene_number:02d}.wav"
+        boundaries = _synthesize(cfg, scene.hindi_narration, dest)
         speech = probe_duration(dest)
 
         words = _align(
@@ -198,7 +269,7 @@ async def _build(cfg: Config, story: Story, out_dir: Path) -> list[SceneAudio]:
 
 
 def generate_audio(cfg: Config, story: Story, out_dir: Path) -> list[SceneAudio]:
-    return asyncio.run(_build(cfg, story, out_dir))
+    return _build(cfg, story, out_dir)
 
 
 def total_duration(scenes: list[SceneAudio]) -> float:
