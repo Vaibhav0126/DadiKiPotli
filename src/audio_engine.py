@@ -5,14 +5,16 @@ each scene's duration an exact measured fact instead of something inferred by
 splitting a single track, and it lets the composer lay out the timeline
 without any alignment guesswork.
 
-Gemini TTS returns raw PCM (no word-boundary stream), so caption timings are
-spread evenly across the measured speech duration. That is close enough for
-karaoke grouping; the important invariant is still Module 1's Hindi/Hinglish
-token parity.
+Primary path is Gemini TTS (raw PCM, no word boundaries). Caption timings are
+then spread evenly across the measured speech duration. If Gemini fails
+(quota, context window, outage), we fall back to edge-tts for the rest of the
+run — edge-tts does report WordBoundary events, which `_align` prefers when
+present.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import re
@@ -20,6 +22,7 @@ import time
 import wave
 from pathlib import Path
 
+import edge_tts
 from google import genai
 from google.genai import types
 
@@ -31,8 +34,13 @@ log = logging.getLogger(__name__)
 
 _RATE_IN_MIME = re.compile(r"rate=(\d+)", re.IGNORECASE)
 
+# edge-tts reports offsets in 100-nanosecond ticks.
+TICKS_PER_SECOND = 10_000_000
+
 # Remember which TTS model worked this process; same pattern as script_engine.
 _active_tts_model: str | None = None
+# Once Gemini fails, stick to edge-tts for remaining scenes in this process.
+_tts_backend: str | None = None  # "gemini" | "edge"
 
 
 class Boundary:
@@ -86,7 +94,7 @@ def _tts_contents(cfg: Config, text: str) -> str:
     return f'{style}\n"{text}"'
 
 
-def _synthesize(cfg: Config, text: str, dest: Path, attempts: int = 3) -> list[Boundary]:
+def _synthesize_gemini(cfg: Config, text: str, dest: Path, attempts: int = 3) -> list[Boundary]:
     """Call Gemini TTS and write a mono WAV. Returns no word boundaries."""
     global _active_tts_model
 
@@ -148,6 +156,79 @@ def _synthesize(cfg: Config, text: str, dest: Path, attempts: int = 3) -> list[B
         f"Gemini TTS failed after trying {', '.join(cfg.audio.models)}: {last_error}. "
         "Check GEMINI_API_KEY and audio.models / audio.voice in config.yaml."
     ) from last_error
+
+
+async def _synthesize_edge(
+    cfg: Config, text: str, dest: Path, attempts: int = 3
+) -> list[Boundary]:
+    """Synthesize with edge-tts and write MP3. Returns WordBoundary timings."""
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        audio = bytearray()
+        boundaries: list[Boundary] = []
+        try:
+            comm = edge_tts.Communicate(
+                text,
+                voice=cfg.audio.fallback_voice,
+                rate=cfg.audio.fallback_rate,
+                pitch=cfg.audio.fallback_pitch,
+                # edge-tts 7.x defaults to SentenceBoundary, which yields one
+                # event for the whole scene and would force captions onto
+                # evenly-spaced timings. Word granularity is still available,
+                # it just has to be asked for.
+                boundary="WordBoundary",
+            )
+            async for chunk in comm.stream():
+                if chunk["type"] == "audio":
+                    audio.extend(chunk["data"])
+                elif chunk["type"] == "WordBoundary":
+                    start = chunk["offset"] / TICKS_PER_SECOND
+                    end = start + chunk["duration"] / TICKS_PER_SECOND
+                    boundaries.append(Boundary(chunk["text"], start, end))
+            if not audio:
+                raise RuntimeError("edge-tts returned no audio")
+            dest.write_bytes(bytes(audio))
+            return boundaries
+        except Exception as exc:  # noqa: BLE001 - retried, then re-raised below
+            last_error = exc
+            wait = 2**attempt
+            log.warning(
+                "edge-tts attempt %d failed (%s), retrying in %ss",
+                attempt + 1,
+                exc,
+                wait,
+            )
+            await asyncio.sleep(wait)
+
+    raise RuntimeError(
+        f"edge-tts failed after {attempts} attempts: {last_error}. "
+        "If this is a 403, upgrade with: pip install -U 'edge-tts>=7.2.7'"
+    ) from last_error
+
+
+def _synthesize(
+    cfg: Config, text: str, dest_stem: Path, attempts: int = 3
+) -> tuple[list[Boundary], Path]:
+    """Try Gemini TTS first; on failure fall back to edge-tts for this run."""
+    global _tts_backend
+
+    if _tts_backend != "edge":
+        dest = dest_stem.with_suffix(".wav")
+        try:
+            boundaries = _synthesize_gemini(cfg, text, dest, attempts=attempts)
+            _tts_backend = "gemini"
+            return boundaries, dest
+        except Exception as exc:  # noqa: BLE001 - intentional provider fallback
+            log.warning(
+                "Gemini TTS unavailable (%s); falling back to edge-tts (%s)",
+                exc,
+                cfg.audio.fallback_voice,
+            )
+            _tts_backend = "edge"
+
+    dest = dest_stem.with_suffix(".mp3")
+    boundaries = asyncio.run(_synthesize_edge(cfg, text, dest, attempts=attempts))
+    return boundaries, dest
 
 
 def _align(
@@ -234,8 +315,8 @@ def _build(cfg: Config, story: Story, out_dir: Path) -> list[SceneAudio]:
     cursor = 0.0
 
     for scene in story.scenes:
-        dest = out_dir / f"scene_{scene.scene_number:02d}.wav"
-        boundaries = _synthesize(cfg, scene.hindi_narration, dest)
+        dest_stem = out_dir / f"scene_{scene.scene_number:02d}"
+        boundaries, dest = _synthesize(cfg, scene.hindi_narration, dest_stem)
         speech = probe_duration(dest)
 
         words = _align(

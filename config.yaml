@@ -33,6 +33,10 @@ audio:
   style_prompt: >-
     Speak warmly and naturally as a Hindi YouTube storyteller.
     Conversational and engaging, not robotic. Recite exactly:
+  # Used automatically when Gemini TTS fails (quota / context window).
+  fallback_voice: hi-IN-SwaraNeural # female; hi-IN-MadhurNeural for male
+  fallback_rate: "+20%"
+  fallback_pitch: "+0Hz"
   # Silence appended after each scene's narration, in seconds.
   scene_gap_s: 0.25
 

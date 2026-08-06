@@ -52,6 +52,10 @@ class AudioCfg(BaseModel):
         "Speak warmly and naturally as a Hindi YouTube storyteller. "
         "Conversational and engaging, not robotic. Recite exactly:"
     )
+    # edge-tts fallback when Gemini TTS fails (quota, context window, outage).
+    fallback_voice: str = "hi-IN-SwaraNeural"
+    fallback_rate: str = "+20%"
+    fallback_pitch: str = "+0Hz"
     scene_gap_s: float = 0.25
 
 

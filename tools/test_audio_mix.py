@@ -1,8 +1,8 @@
 """Quick narration + music mix for tuning ducking levels.
 
-Uses a hardcoded Hindi script (no story LLM), Gemini TTS, and the local
-music bed. Useful for tuning music.volume_db / duck_db without burning
-Cloudflare neurons or fal spend. Still needs GEMINI_API_KEY for voice.
+Uses a hardcoded Hindi script (no story LLM), Gemini TTS with edge-tts
+fallback, and the local music bed. Useful for tuning music.volume_db /
+duck_db without burning Cloudflare neurons or fal spend.
 
     .venv/bin/python -m tools.test_audio_mix
     .venv/bin/python -m tools.test_audio_mix --volume-db -18
