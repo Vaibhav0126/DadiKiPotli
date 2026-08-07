@@ -21,6 +21,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from pydantic import BaseModel, Field
 
 from .config import Config
+from .gemini_util import generate_with_fallback
 from .models import Story, read_json, write_json
 
 log = logging.getLogger(__name__)
@@ -42,34 +43,23 @@ class PublishResult(BaseModel):
     youtube_url: str | None = None
 
 
-def _is_missing_model(exc: Exception) -> bool:
-    text = str(exc)
-    return "NOT_FOUND" in text or "404" in text or "not available" in text
-
-
 def _gemini_call(cfg: Config, **kwargs) -> object:
     global _active_model
-    candidates = [_active_model] if _active_model else list(cfg.story.models)
-    last_error: Exception | None = None
     client = genai.Client(api_key=cfg.gemini_api_key)
 
-    for model in candidates:
-        try:
-            resp = client.models.generate_content(model=model, **kwargs)
-            if _active_model != model:
-                log.info("using Gemini model: %s", model)
-                _active_model = model
-            return resp
-        except Exception as exc:  # noqa: BLE001
-            last_error = exc
-            if not _is_missing_model(exc):
-                raise
-            log.debug("model %s unavailable, trying next", model)
+    def _one(model: str) -> object:
+        return client.models.generate_content(model=model, **kwargs)
 
-    raise RuntimeError(
-        f"None of the configured Gemini models are available "
-        f"({', '.join(cfg.story.models)}). Last error: {last_error}"
-    ) from last_error
+    resp, model = generate_with_fallback(
+        models=list(cfg.story.models),
+        call=_one,
+        active_model=_active_model,
+        label="Gemini publish",
+    )
+    if _active_model != model:
+        log.info("using Gemini model: %s", model)
+        _active_model = model
+    return resp
 
 
 def _clamp_title(title: str, *, shorts: bool, max_len: int = 100) -> str:

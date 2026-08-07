@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import ROOT, Config, load_config  # noqa: E402
 from src.ffmpeg_util import FFmpegError, ensure_available  # noqa: E402
+from src.gemini_util import generate_with_fallback  # noqa: E402
 from src.main import run_pipeline  # noqa: E402
 
 log = logging.getLogger("daily_post")
@@ -150,7 +151,6 @@ def _invent_idea(cfg: Config, *, profile: str) -> str:
             f"already-used ideas:\n{listed}\n"
         )
 
-    last_error: Exception | None = None
     for attempt in range(1, _MAX_INVENT_ATTEMPTS + 1):
         cast = random.choice(_CHARACTERS)
         if kind == "long":
@@ -174,23 +174,18 @@ def _invent_idea(cfg: Config, *, profile: str) -> str:
                 "no explanation. Keep it under 20 words."
                 f"{banned_block}"
             )
-        resp = None
-        for model in cfg.story.models:
-            try:
-                resp = client.models.generate_content(model=model, contents=prompt)
-                break
-            except Exception as exc:  # noqa: BLE001
-                last_error = exc
-                text = str(exc)
-                if (
-                    "NOT_FOUND" not in text
-                    and "404" not in text
-                    and "not available" not in text
-                ):
-                    raise
-                log.debug("model %s unavailable, trying next", model)
-        if resp is None:
-            raise RuntimeError(f"Could not invent an idea via Gemini: {last_error}")
+
+        def _one(model: str, _prompt: str = prompt) -> object:
+            return client.models.generate_content(model=model, contents=_prompt)
+
+        resp, model = generate_with_fallback(
+            models=list(cfg.story.models),
+            call=_one,
+            attempts_per_model=2,
+            label="Gemini invent",
+        )
+        log.debug("invent used model %s", model)
+
         idea = (getattr(resp, "text", None) or "").strip().strip('"').strip("'")
         if not idea:
             log.warning("Gemini returned an empty idea (attempt %d)", attempt)
@@ -213,7 +208,20 @@ def next_idea(cfg: Config, override: str | None, *, from_queue: bool, profile: s
         if queue:
             return queue[0]
         log.info("%s is empty; falling back to invent", _ideas_path(profile).name)
-    return _invent_idea(cfg, profile=profile)
+        return _invent_idea(cfg, profile=profile)
+
+    try:
+        return _invent_idea(cfg, profile=profile)
+    except Exception as exc:  # noqa: BLE001 - queue is a hard fallback for CI
+        queue = _read_queue(_ideas_path(profile))
+        if queue:
+            log.warning(
+                "Gemini invent unavailable (%s); using queued idea: %s",
+                exc,
+                queue[0],
+            )
+            return queue[0]
+        raise
 
 
 def main() -> int:

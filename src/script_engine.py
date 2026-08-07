@@ -15,6 +15,7 @@ from google import genai
 from google.genai import types
 
 from .config import ROOT, Config
+from .gemini_util import generate_with_fallback
 from .models import Scene, Story, StoryDraft, slugify, tokenize
 from .romanize import fallback_romanize
 
@@ -24,43 +25,30 @@ log = logging.getLogger(__name__)
 _active_model: str | None = None
 
 
-def _is_missing_model(exc: Exception) -> bool:
-    text = str(exc)
-    return "NOT_FOUND" in text or "404" in text or "not available" in text
-
-
 def _call(cfg: Config, **kwargs) -> object:
     """Invoke Gemini, falling back through the configured model list.
 
     Google retires model IDs on a schedule that outpaces most codebases, and a
     retired ID returns 404 rather than redirecting, so pinning a single name
-    turns into a hard failure months later.
+    turns into a hard failure months later. Capacity 503s also hop to the next
+    model after a short backoff.
     """
     global _active_model
 
-    candidates = [_active_model] if _active_model else list(cfg.story.models)
-    last_error: Exception | None = None
+    def _one(model: str) -> object:
+        client = _client(cfg)
+        return client.models.generate_content(model=model, **kwargs)
 
-    for model in candidates:
-        try:
-            client = _client(cfg)
-            resp = client.models.generate_content(model=model, **kwargs)
-            if _active_model != model:
-                log.info("using Gemini model: %s", model)
-                _active_model = model
-            return resp
-        except Exception as exc:  # noqa: BLE001 - inspected, then re-raised
-            last_error = exc
-            if not _is_missing_model(exc):
-                raise
-            log.debug("model %s unavailable, trying next", model)
-
-    raise RuntimeError(
-        f"None of the configured Gemini models are available to this key "
-        f"({', '.join(cfg.story.models)}). Check the current free-tier model IDs at "
-        f"https://ai.google.dev/gemini-api/docs/models and update story.models "
-        f"in config.yaml. Last error: {last_error}"
-    ) from last_error
+    resp, model = generate_with_fallback(
+        models=list(cfg.story.models),
+        call=_one,
+        active_model=_active_model,
+        label="Gemini story",
+    )
+    if _active_model != model:
+        log.info("using Gemini model: %s", model)
+        _active_model = model
+    return resp
 
 
 def _system_prompt(cfg: Config) -> str:

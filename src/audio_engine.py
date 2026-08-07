@@ -28,6 +28,7 @@ from google.genai import types
 
 from .config import Config
 from .ffmpeg_util import probe_duration
+from .gemini_util import is_capacity_error, is_missing_model
 from .models import SceneAudio, Story, WordTiming, tokenize
 
 log = logging.getLogger(__name__)
@@ -54,34 +55,6 @@ class Boundary:
 
 def _client(cfg: Config) -> genai.Client:
     return genai.Client(api_key=cfg.gemini_api_key)
-
-
-def _is_missing_model(exc: Exception) -> bool:
-    text = str(exc)
-    return "NOT_FOUND" in text or "404" in text or "not available" in text.lower()
-
-
-def _is_capacity_error(exc: Exception) -> bool:
-    """True when Gemini is overloaded / rate-limited — fall back to edge-tts ASAP.
-
-    These are temporary provider-side failures (yesterday's 503 high-demand
-    spikes). Retrying every TTS model just burns CI time; edge-tts can finish
-    the video instead.
-    """
-    text = str(exc).upper()
-    markers = (
-        "503",
-        "UNAVAILABLE",
-        "HIGH DEMAND",
-        "RESOURCE_EXHAUSTED",
-        "RESOURCE HAS BEEN EXHAUSTED",
-        "429",
-        "TOO MANY REQUESTS",
-        "QUOTA",
-        "RATE LIMIT",
-        "RATE_LIMIT",
-    )
-    return any(m in text for m in markers)
 
 
 def _pcm_bytes(data: bytes | str) -> bytes:
@@ -162,7 +135,7 @@ def _synthesize_gemini(cfg: Config, text: str, dest: Path, attempts: int = 3) ->
                 return []
             except Exception as exc:  # noqa: BLE001 - retried / model-fallback
                 last_error = exc
-                if _is_capacity_error(exc):
+                if is_capacity_error(exc):
                     # Don't grind through every model on a provider outage —
                     # let _synthesize switch to edge-tts immediately.
                     log.warning(
@@ -170,7 +143,7 @@ def _synthesize_gemini(cfg: Config, text: str, dest: Path, attempts: int = 3) ->
                         exc,
                     )
                     raise
-                if _is_missing_model(exc):
+                if is_missing_model(exc):
                     log.debug("TTS model %s unavailable, trying next", model)
                     break
                 wait = 2**attempt
