@@ -15,6 +15,7 @@ from google import genai
 from google.genai import types
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -179,10 +180,21 @@ def youtube_credentials(cfg: Config, *, interactive: bool = False) -> Credential
         return creds
 
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        token_path.parent.mkdir(parents=True, exist_ok=True)
-        token_path.write_text(creds.to_json(), encoding="utf-8")
-        return creds
+        try:
+            creds.refresh(Request())
+            token_path.parent.mkdir(parents=True, exist_ok=True)
+            token_path.write_text(creds.to_json(), encoding="utf-8")
+            return creds
+        except RefreshError as exc:
+            # Testing-mode refresh tokens expire after ~7 days (or get revoked).
+            # Fall through to interactive re-consent when allowed.
+            log.warning("YouTube refresh token unusable (%s)", exc)
+            if not interactive:
+                raise RuntimeError(
+                    f"YouTube OAuth token expired/revoked at {token_path}. "
+                    f"Run: python -m tools.auth_youtube"
+                ) from exc
+            creds = None
 
     if not interactive:
         raise RuntimeError(

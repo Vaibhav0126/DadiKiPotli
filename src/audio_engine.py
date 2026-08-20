@@ -9,7 +9,8 @@ Primary path is Gemini TTS (raw PCM, no word boundaries). Caption timings are
 then spread evenly across the measured speech duration. If Gemini fails
 (quota, context window, outage), we fall back to edge-tts for the rest of the
 run — edge-tts does report WordBoundary events, which `_align` prefers when
-present.
+present. Set `audio.provider: edge` to skip Gemini TTS entirely (used for
+weekly long-form).
 """
 
 from __future__ import annotations
@@ -213,8 +214,16 @@ async def _synthesize_edge(
 def _synthesize(
     cfg: Config, text: str, dest_stem: Path, attempts: int = 3
 ) -> tuple[list[Boundary], Path]:
-    """Try Gemini TTS first; on failure fall back to edge-tts for this run."""
+    """Try Gemini TTS first; on failure fall back to edge-tts for this run.
+
+    `audio.provider: edge` skips Gemini and uses edge-tts for every scene.
+    """
     global _tts_backend
+
+    if cfg.audio.provider == "edge":
+        if _tts_backend != "edge":
+            log.info("using edge-tts only (%s)", cfg.audio.fallback_voice)
+        _tts_backend = "edge"
 
     if _tts_backend != "edge":
         dest = dest_stem.with_suffix(".wav")

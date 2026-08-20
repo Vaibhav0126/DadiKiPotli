@@ -8,11 +8,11 @@ story:
     - gemini-3.1-flash-lite
     - gemini-2.0-flash
     - gemini-flash-latest
-  scene_count: 10
-  max_hindi_words: 145
+  scene_count: 8
+  max_hindi_words: 90
   # Regenerate the script if narration falls outside this window.
-  min_duration_s: 48.0
-  max_duration_s: 62.0
+  min_duration_s: 28.0
+  max_duration_s: 40.0
   max_script_retries: 2
   # Prepended to every image prompt. Keep it front-loaded and concrete:
   # trailing style words get ignored, and vague ones ("beautiful", "detailed")
@@ -23,6 +23,7 @@ story:
     colors, simple shapes, storybook illustration
 
 audio:
+  provider: gemini # gemini (with edge-tts fallback) | edge
   models:
     - gemini-3.1-flash-tts-preview
     - gemini-2.5-flash-preview-tts

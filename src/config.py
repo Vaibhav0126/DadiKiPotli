@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 ROOT = Path(__file__).resolve().parent.parent
 WORK = ROOT / "work"
@@ -23,10 +23,10 @@ class StoryCfg(BaseModel):
         "gemini-2.0-flash",
         "gemini-flash-latest",
     ]
-    scene_count: int = 10
-    max_hindi_words: int = 145
-    min_duration_s: float = 48.0
-    max_duration_s: float = 62.0
+    scene_count: int = 8
+    max_hindi_words: int = 90
+    min_duration_s: float = 28.0
+    max_duration_s: float = 40.0
     max_script_retries: int = 2
     art_style: str = ""
     # Relative to project root. short vs long use different story shapes.
@@ -36,6 +36,8 @@ class StoryCfg(BaseModel):
 
 
 class AudioCfg(BaseModel):
+    # gemini = Gemini TTS with edge-tts fallback; edge = edge-tts only.
+    provider: str = "gemini"
     # Tried in order; first reachable Gemini TTS model is remembered.
     models: list[str] = [
         "gemini-3.1-flash-tts-preview",
@@ -57,6 +59,14 @@ class AudioCfg(BaseModel):
     fallback_rate: str = "+20%"
     fallback_pitch: str = "+0Hz"
     scene_gap_s: float = 0.25
+
+    @field_validator("provider")
+    @classmethod
+    def _normalize_provider(cls, value: str) -> str:
+        name = (value or "gemini").strip().lower()
+        if name not in {"gemini", "edge"}:
+            raise ValueError("audio.provider must be 'gemini' or 'edge'")
+        return name
 
 
 class ImagesCfg(BaseModel):

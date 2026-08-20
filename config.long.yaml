@@ -23,6 +23,8 @@ story:
     colors, simple shapes, storybook illustration
 
 audio:
+  # Long-form uses edge-tts only (Gemini TTS quota is reserved for daily Shorts).
+  provider: edge
   models:
     - gemini-3.1-flash-tts-preview
     - gemini-2.5-flash-preview-tts
@@ -32,7 +34,6 @@ audio:
   style_prompt: >-
     Speak warmly and naturally as a Hindi YouTube storyteller.
     Conversational and engaging, not robotic. Recite exactly:
-  # Used automatically when Gemini TTS fails (quota / context window).
   fallback_voice: hi-IN-SwaraNeural
   fallback_rate: "+20%"
   fallback_pitch: "+0Hz"
