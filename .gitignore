@@ -14,3 +14,4 @@ assets/sfx/
 assets/fonts/*
 !assets/fonts/.gitkeep
 !assets/fonts/Poppins-Bold.ttf
+.DS_Store

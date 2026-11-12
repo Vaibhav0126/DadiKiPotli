@@ -2,13 +2,47 @@
 # One per line: Character | premise type | the one-line idea sent to the script writer.
 # Premise types: trick, rescue, test_of_wits, comeuppance, riddle.
 # Each classic is posted once; ideas_used.txt records which ones are done.
-# Please check the wording against the versions you want to retell.
+# These follow the widely told versions; the script writer keeps the ending.
 
-Akbar-Birbal | test_of_wits | Akbar asks Birbal to count the crows in the capital, and Birbal gives a number nobody can check.
-Akbar-Birbal | trick | A poor man smells a shopkeeper's food and is made to pay for it with the sound of coins.
-Akbar-Birbal | riddle | Akbar asks why Birbal's khichdi takes so long to cook, and Birbal must explain himself before the court.
-Tenali Raman | trick | A ghost is said to haunt the palace, and Tenali must spend a night there without losing his nerve or his purse.
-Tenali Raman | comeuppance | A greedy man sells the king a cure that does nothing, and Tenali makes him pay for his own lie.
-Tenali Raman | rescue | Tenali saves a cat that is about to be blamed for stealing the milk, and proves who really did it.
-Vikram-Betaal | riddle | Betaal tells Vikram of a woman with three husbands and asks which one she belongs to, or he will be cursed.
-Vikram-Betaal | test_of_wits | Vikram must carry Betaal across a forest, and the corpse tells him a riddle at every step.
+# ---------- Akbar-Birbal ----------
+Akbar-Birbal | test_of_wits | Akbar asks Birbal how many crows live in the capital; Birbal names an exact number and explains any difference: some crows went visiting relatives, or relatives came to visit.
+Akbar-Birbal | rescue | A poor man stands all night in a freezing lake for a reward, Akbar refuses because he saw a distant palace lamp, and Birbal proves the point by "cooking" khichdi with the pot hung far above the fire.
+Akbar-Birbal | test_of_wits | Akbar draws a line and asks his courtiers to make it shorter without touching it; Birbal simply draws a longer line beside it.
+Akbar-Birbal | trick | A courtier's ring goes missing and Birbal says the thief has a straw stuck in his beard; the guilty man touches his beard and gives himself away.
+Akbar-Birbal | trick | Birbal gives each suspected servant a stick, saying the thief's stick will grow by two inches overnight; the thief cuts his stick shorter and is caught.
+Akbar-Birbal | comeuppance | Courtiers plot to embarrass Birbal by each producing an egg "laid" in the royal pond, and Birbal crows like a rooster: where there are hens, there must be a rooster.
+Akbar-Birbal | test_of_wits | A foreign king asks Akbar for a pot full of wisdom; Birbal grows a pumpkin inside a pot and sends it with the warning not to break the pot.
+Akbar-Birbal | comeuppance | A jealous barber convinces Akbar to send Birbal to heaven through a funeral pyre; Birbal escapes through a tunnel and returns saying the ancestors urgently need a barber.
+Akbar-Birbal | comeuppance | A man sells his well to a farmer but claims he never sold the water; Birbal tells him to remove his water from the farmer's well at once or pay rent for keeping it there.
+Akbar-Birbal | comeuppance | A palace guard demands half of a poor man's reward; the man asks Akbar for a hundred lashes as his reward, half of them for the guard.
+Akbar-Birbal | test_of_wits | Akbar asks Birbal for a list of the biggest fools in the kingdom, and Birbal puts the emperor himself at the top for paying a horse trader in advance.
+Akbar-Birbal | test_of_wits | An astrologer tells Akbar his dream of falling teeth means all his relatives will die before him; Birbal says the same thing kindly: the emperor will outlive them all.
+Akbar-Birbal | trick | Akbar orders Birbal to bring ox's milk; Birbal's daughter comes to court saying her father is busy giving birth, and Akbar realises his own order was impossible.
+Akbar-Birbal | riddle | Akbar asks how far truth is from a lie, and Birbal answers four fingers: the distance between the eye and the ear.
+Akbar-Birbal | trick | Birbal tells suspects that a magic donkey in a dark tent will bray when the thief pulls its tail; only the thief comes out with clean hands, because the tail was covered in soot.
+Akbar-Birbal | test_of_wits | Akbar asks Birbal to find the four biggest fools, and Birbal brings two strangers, then points at Akbar and himself for wasting a day on the search.
+Akbar-Birbal | riddle | Akbar asks for the most beautiful child in the city; a maid brings her own plain-looking son, and Birbal explains why every mother is right.
+Akbar-Birbal | rescue | Two women both claim the same baby, and Birbal finds the real mother by watching who gives up her claim to keep the child safe.
+
+# ---------- Tenali Raman ----------
+Tenali Raman | trick | The king gives everyone a cat and a cow to feed it milk; Tenali drinks the milk himself and once feeds the cat boiling milk, so his cat refuses milk in front of the king.
+Tenali Raman | trick | Thieves hide outside Tenali's house; he loudly tells his wife their valuables are in the well, and the thieves spend all night drawing water, which waters his whole garden.
+Tenali Raman | test_of_wits | A proud scholar challenges the court to debate; Tenali arrives with a bundle he calls "Tilakashta Mahisha Bandhanam" and asks the scholar to explain a book that is really sesame sticks tied with buffalo rope.
+Tenali Raman | comeuppance | Greedy priests are given golden mangoes in memory of the king's mother; Tenali tells them her last wish was to treat her joints with hot iron, and they return the gold to escape the "ritual".
+Tenali Raman | trick | Sentenced to be trampled by an elephant while buried to his neck, Tenali convinces a passing hunchback that sitting in the pit will cure his hunch, and both men escape harm.
+Tenali Raman | trick | The angry king orders Tenali never to show his face again; Tenali comes to court with a clay pot over his head.
+Tenali Raman | test_of_wits | Tenali paints the palace wall with only arms, legs and partial figures; when the king asks where the rest is, Tenali says the rest is left to imagination.
+Tenali Raman | comeuppance | The king gives each courtier a horse to feed for a year; Tenali feeds his horse so little that it grabs the beard of the guard who comes to inspect it.
+Tenali Raman | trick | Goddess Kali appears to Tenali, and instead of trembling he laughs: how would someone with a thousand heads blow all those noses during a cold?
+Tenali Raman | comeuppance | A royal gatekeeper demands a share of every reward; Tenali asks the king for a hundred lashes as his prize and insists the gatekeeper receive his share first.
+
+# ---------- Vikram-Betaal ----------
+Vikram-Betaal | riddle | Three suitors save a dead bride: one guards her ashes, one carries her bones to the Ganga, one learns a mantra and revives her. Betaal asks Vikram which one should marry her.
+Vikram-Betaal | riddle | A husband and a brother behead themselves at a Durga temple; the grieving woman reattaches the heads to the wrong bodies. Betaal asks Vikram which man is now her husband.
+Vikram-Betaal | riddle | Three queens: one is bruised by a falling lotus petal, one burned by moonlight, one blistered by the sound of a distant pestle. Betaal asks Vikram which queen is the most delicate.
+Vikram-Betaal | riddle | Four learned brothers use their knowledge to rebuild and revive a dead lion, which eats them. Betaal asks Vikram which brother was the greatest fool.
+Vikram-Betaal | riddle | The loyal servant Viravara sacrifices his son, his wife and himself for his king, and the king then offers his own life to the goddess. Betaal asks Vikram whose sacrifice was greatest.
+Vikram-Betaal | riddle | A condemned thief first weeps and then laughs on the way to his execution. Betaal asks Vikram why he laughed.
+Vikram-Betaal | riddle | Prince Jimutavahana offers himself to the eagle Garuda in place of the serpent Shankhachuda, who then runs back to stop him. Betaal asks Vikram who was the nobler one.
+Vikram-Betaal | riddle | Three brothers are absurdly fussy: one about food, one about women, one about beds, who finds a single hair under seven mattresses. Betaal asks Vikram which brother is the most delicate.
+Vikram-Betaal | riddle | A father marries a daughter and his son marries her mother, following their footprints by mistake. Betaal asks Vikram how their children will be related, and for the first time Vikram has no answer.
