@@ -9,10 +9,12 @@ story:
     - gemini-2.0-flash
     - gemini-flash-latest
   scene_count: 8
-  max_hindi_words: 90
+  # Trimmed from 90 so the reel lands near 30s: a short gets more replays and
+  # holds attention better than a long one, and this cuts ~25% of the runtime.
+  max_hindi_words: 72
   # Regenerate the script if narration falls outside this window.
-  min_duration_s: 28.0
-  max_duration_s: 40.0
+  min_duration_s: 22.0
+  max_duration_s: 34.0
   max_script_retries: 2
   # Prepended to every image prompt. Keep it front-loaded and concrete:
   # trailing style words get ignored, and vague ones ("beautiful", "detailed")
@@ -31,15 +33,32 @@ audio:
   # Friendly storyteller. Try Sulafat (warm), Achernar (soft), Kore (firm).
   voice: Achird
   language_code: hi
+  # Director's note for Gemini TTS. Describes delivery, not content.
+  # Speed is set by style_prompt (brisk) and tempo (below): Gemini TTS has no rate control.
   style_prompt: >-
-    Speak warmly and naturally as a Hindi YouTube storyteller.
-    Conversational and engaging, not robotic. Recite exactly:
+    Narrate like a lively dadi or kahani-wali telling a story to children:
+    brisk, energetic and expressive, never robotic. Keep a quick pace with
+    only short pauses between phrases. Sound amused in the funny moments. Drop your voice
+    slightly with suspense just before the twist, then sharpen and lift it for
+    the twist line. Give each character a tone of their own: an emperor sounds
+    grand, a clever minister sounds dry and sly, a frightened victim sounds
+    anxious. Recite exactly:
   # Used automatically when Gemini TTS fails (quota / context window).
   fallback_voice: hi-IN-SwaraNeural # female; hi-IN-MadhurNeural for male
   fallback_rate: "+20%"
   fallback_pitch: "+0Hz"
-  # Silence appended after each scene's narration, in seconds.
-  scene_gap_s: 0.25
+  # Playback speed-up applied to each line's audio (pitch preserved, via atempo).
+  # 1.10 is about 10% faster: noticeable, still natural.
+  tempo: 1.10
+  # Each spoken line is its own Gemini call, so each can have its own voice.
+  # Narration uses `voice`. Dialogue uses `character_voices[name]`, falling back
+  # to `dialogue_voice`. If Gemini rejects a dialogue voice, that line falls back
+  # to the narrator voice and a warning is logged.
+  dialogue_voice: Puck
+  character_voices: {}
+  # Silence between two lines of the same scene, and after each scene.
+  line_gap_s: 0.12
+  scene_gap_s: 0.15
 
 images:
   # cloudflare = free Workers AI (10k neurons/day). pollinations = fallback.
@@ -56,7 +75,9 @@ images:
   max_retries: 4
 
 motion:
-  enabled: true
+  # Off on purpose: fal.ai is paid and this channel runs on free tiers only.
+  # Ken Burns carries every scene. Set true only if you deliberately accept spend.
+  enabled: false
   provider: fal # fal | none
   model: fal-ai/wan-25-preview/image-to-video
   resolution: 480p
@@ -72,8 +93,10 @@ video:
   width: 1080
   height: 1920
   fps: 30
-  transition: fade # fade | none
-  transition_s: 0.3
+  # Any ffmpeg xfade name, or "none" for a hard cut. Quick slides keep the
+  # pace up; anything over ~0.15s reads as sluggish in a Short.
+  transition: slideleft
+  transition_s: 0.12
 
 captions:
   font_file: assets/fonts/Poppins-Bold.ttf

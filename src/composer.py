@@ -15,20 +15,22 @@ from pathlib import Path
 from .config import Config
 from .ffmpeg_util import escape_filter_path, probe_duration, run
 from .models import Timeline
-from .motion_engine import KEN_BURNS, build_clip_segment, build_still_segment
+from .motion_engine import KEN_BURNS, PUNCH_IN, build_clip_segment, build_still_segment
+from .sfx import cues as sfx_cues
+from .sfx import ensure_sfx
 
 log = logging.getLogger(__name__)
 
 
 def build_segments(cfg: Config, timeline: Timeline, seg_dir: Path) -> list[Path]:
     seg_dir.mkdir(parents=True, exist_ok=True)
-    transition = cfg.video.transition_s if cfg.video.transition == "fade" else 0.0
+    transition = 0.0 if cfg.video.transition == "none" else cfg.video.transition_s
     paths: list[Path] = []
     last = len(timeline.audio) - 1
 
     for i, audio in enumerate(timeline.audio):
         visual = timeline.visual_for(audio.scene_number)
-        # Every segment but the last carries an extra tail that the crossfade
+        # Every segment but the last carries an extra tail that the transition
         # consumes, so the summed runtime still matches the audio timeline.
         duration = audio.duration + (transition if i < last else 0.0)
         dest = seg_dir / f"seg_{audio.scene_number:02d}.mp4"
@@ -36,13 +38,10 @@ def build_segments(cfg: Config, timeline: Timeline, seg_dir: Path) -> list[Path]
         if visual.clip_path:
             build_clip_segment(cfg, Path(visual.clip_path), duration, dest)
         else:
-            build_still_segment(
-                cfg,
-                Path(visual.image_path),
-                duration,
-                dest,
-                KEN_BURNS[i % len(KEN_BURNS)],
-            )
+            # Scene 1 punches in on the first frame; the rest alternate Ken Burns
+            # directions so no two neighbouring cuts move the same way.
+            variant = PUNCH_IN if i == 0 else KEN_BURNS[(i - 1) % len(KEN_BURNS)]
+            build_still_segment(cfg, Path(visual.image_path), duration, dest, variant)
         paths.append(dest)
         log.info("segment %d built (%.2fs)", audio.scene_number, duration)
 
@@ -54,7 +53,7 @@ def concat_segments(cfg: Config, segments: list[Path], dest: Path) -> None:
         run(["-i", str(segments[0]), "-c", "copy", str(dest)], label="single segment")
         return
 
-    if cfg.video.transition != "fade":
+    if cfg.video.transition == "none":
         listing = dest.parent / "segments.txt"
         listing.write_text(
             "\n".join(f"file '{p.resolve()}'" for p in segments) + "\n", encoding="utf-8"
@@ -79,7 +78,8 @@ def concat_segments(cfg: Config, segments: list[Path], dest: Path) -> None:
         label = f"[x{i}]" if i < len(segments) - 1 else "[vout]"
         offset = max(accumulated - t, 0.0)
         steps.append(
-            f"{current}[{i}:v]xfade=transition=fade:duration={t}:offset={offset:.3f}{label}"
+            f"{current}[{i}:v]xfade=transition={cfg.video.transition}"
+            f":duration={t}:offset={offset:.3f}{label}"
         )
         accumulated = accumulated + durations[i] - t
         current = label
@@ -143,37 +143,74 @@ def pick_music(cfg: Config) -> Path | None:
     return random.choice(tracks)
 
 
-def mix_audio(cfg: Config, voice: Path, music: Path | None, duration: float, dest: Path) -> None:
-    if music is None:
-        run(
-            [
-                "-i", str(voice),
-                "-filter_complex", "[0:a]alimiter=limit=0.95[aout]",
-                "-map", "[aout]",
-                "-t", f"{duration:.3f}",
-                "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-                str(dest),
-            ],
-            label="audio (voice only)",
-        )
-        return
+def mix_audio(
+    cfg: Config,
+    voice: Path,
+    music: Path | None,
+    duration: float,
+    dest: Path,
+    cues: list[tuple[float, str, float]] | None = None,
+    sfx_files: dict[str, Path] | None = None,
+) -> None:
+    """Narration, an optional ducked music bed, and sound-effect cues in one track.
 
-    # The music bed loops for the full narration length and is ducked by the
-    # voice rather than sitting at a fixed level, so it can be louder in the
-    # gaps without fighting the narrator.
-    graph = (
-        "[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=2[v1][v2];"
-        f"[1:a]aformat=sample_rates=48000:channel_layouts=stereo,"
-        f"volume={cfg.music.volume_db}dB[m];"
-        "[m][v1]sidechaincompress=threshold=0.045:ratio=8:attack=15:release=350[duck];"
-        "[duck][v2]amix=inputs=2:normalize=0[mixed];"
-        "[mixed]alimiter=limit=0.95[aout]"
-    )
+    Each effect is delayed to its cue time, so it stays on the scene grid. The
+    result is cut to `duration`, the sum of the scene slots.
+    """
+    cues = cues or []
+    sfx_files = sfx_files or {}
+
+    inputs = ["-i", str(voice)]
+    next_input = 1
+    music_input = None
+    if music is not None:
+        inputs += ["-stream_loop", "-1", "-i", str(music)]
+        music_input = next_input
+        next_input += 1
+
+    cue_inputs: list[int] = []
+    for _, name, _ in cues:
+        inputs += ["-i", str(sfx_files[name])]
+        cue_inputs.append(next_input)
+        next_input += 1
+
+    graph = ["[0:a]aformat=sample_rates=48000:channel_layouts=stereo[voice]"]
+    if music_input is None:
+        graph.append("[voice]anull[bed]")
+    else:
+        # The music bed loops for the full narration length and is ducked by the
+        # voice rather than sitting at a fixed level, so it can be louder in the
+        # gaps without fighting the narrator.
+        graph += [
+            "[voice]asplit=2[vsc][vmix]",
+            f"[{music_input}:a]aformat=sample_rates=48000:channel_layouts=stereo,"
+            f"volume={cfg.music.volume_db}dB[m]",
+            "[m][vsc]sidechaincompress=threshold=0.045:ratio=8:attack=15:release=350[duck]",
+            "[duck][vmix]amix=inputs=2:normalize=0[bed]",
+        ]
+
+    labels = ["[bed]"]
+    for (start, _, gain), index in zip(cues, cue_inputs):
+        delay_ms = max(int(round(start * 1000)), 0)
+        label = f"[cue{index}]"
+        graph.append(
+            f"[{index}:a]aformat=sample_rates=48000:channel_layouts=stereo,"
+            f"volume={gain},adelay={delay_ms}:all=1{label}"
+        )
+        labels.append(label)
+
+    if len(labels) > 1:
+        graph.append(
+            f"{''.join(labels)}amix=inputs={len(labels)}:normalize=0:duration=first[mixed]"
+        )
+    else:
+        graph.append("[bed]anull[mixed]")
+    graph.append("[mixed]alimiter=limit=0.95[aout]")
+
     run(
         [
-            "-i", str(voice),
-            "-stream_loop", "-1", "-i", str(music),
-            "-filter_complex", graph,
+            *inputs,
+            "-filter_complex", ";".join(graph),
             "-map", "[aout]",
             "-t", f"{duration:.3f}",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
@@ -225,7 +262,10 @@ def compose(cfg: Config, timeline: Timeline, work: Path, captions: Path, dest: P
     build_voice_track(cfg, timeline, voice)
 
     mixed = work / "audio_mixed.m4a"
-    mix_audio(cfg, voice, pick_music(cfg), duration, mixed)
+    mix_audio(
+        cfg, voice, pick_music(cfg), duration, mixed,
+        cues=sfx_cues(timeline), sfx_files=ensure_sfx(),
+    )
 
     render_final(cfg, silent, mixed, captions, duration, dest)
     log.info("rendered %s (%.1fs)", dest.name, duration)

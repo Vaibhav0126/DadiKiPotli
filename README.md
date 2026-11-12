@@ -174,19 +174,30 @@ only `warn` — they do not block local renders.
 .venv/bin/python -m src.main "..." --publish
 ```
 
-## Daily GitHub Action (1pm JST)
+## Daily GitHub Action (19:00 IST)
 
 Workflow: `.github/workflows/daily-post.yml`
 
-- Runs every day at **13:00 JST** (`cron: 0 4 * * *` UTC)
+- Runs every day at **13:30 UTC = 19:00 IST** (`cron: 30 13 * * *`), the evening
+  peak. The slot lives in `src/schedule.py`; a test checks the cron matches it.
+  (The old `0 4 * * *` was described as 1pm JST but actually ran at 09:30 IST.)
 - Also runnable manually via **Actions → Daily Short → Run workflow**
-- Gemini invents a fresh idea each run (avoids anything already in
-  `ideas_used.txt`), renders one short, uploads to YouTube, then records the
-  idea in `ideas_used.txt` (committed back to the repo)
+- Each run plans one post (`src/ideas.py`): about half the time a famous classic
+  from `prompts/classics.txt`, each one posted once; otherwise a new story. The
+  character family and premise type never repeat from the previous day. Gemini
+  writes new ideas, and ideas that break the rules (lawsuits, treason debates,
+  "is it a sin") are rejected and retried.
+- Renders one short, uploads it, then records the idea in `ideas_used.txt` and
+  the upload in `data/uploads.json`. Both are committed back to the repo.
+- The feedback loop (`src/performance.py`) reads view counts for uploads at
+  least 48 hours old and weights the next plan by them, with about 25% of picks
+  left to exploration. It needs the `youtube.readonly` scope: run
+  `python -m tools.auth_youtube --reauth` once, then update the
+  `YOUTUBE_TOKEN_JSON` secret. Without it the run logs a skip and carries on.
 - Pass an idea in the workflow input, or use `--from-queue` locally to take the
   next unused line from `ideas.txt` instead
-- Defaults to `--no-motion` (free Ken Burns). Uncheck that on a manual run
-  only if `FAL_KEY` is set and you want paid clips
+- Defaults to `--no-motion`. Motion is also off in `config.yaml`, so fal.ai is
+  never called unless you turn it on deliberately.
 
 ## Sunday long-form (2pm JST)
 
@@ -241,9 +252,13 @@ Everything lives in `config.yaml` (Shorts) or `config.long.yaml` (`--profile lon
   regenerated if the narrated audio misses the window.
 - **Music** — `music.volume_db` (default **-25**). Tracks in `assets/music/`
   loop for the full video length and duck under narration.
-- **Voice** — `audio.voice` (Gemini prebuilt voice). Default is `Sulafat`
-  (warm storyteller). Try `Achird` (friendly), `Achernar` (soft), or `Kore`
-  (firm). Steer delivery with `audio.style_prompt`.
+- **Voice** — `audio.voice` (Gemini prebuilt voice). Default is `Achird`
+  (friendly). Try `Sulafat` (warm), `Achernar` (soft), or `Kore` (firm). Steer
+  delivery with `audio.style_prompt`.
+- **Voice failures** — Gemini TTS is the only voice for scheduled runs. Capacity
+  errors (429/5xx) retry with backoff (5 tries, 2s to 16s between them). If it
+  still fails, the run raises and that day is skipped rather than posting edge-tts.
+  For local tests only, `--allow-edge` lets edge-tts stand in for a failed scene.
 - **Spend** — `motion.hero_scene_count` and `motion.max_cost_usd`. The cap is
   checked before each call, and blowing it degrades to Ken Burns rather than
   failing the run.

@@ -196,6 +196,11 @@ def main() -> int:
         action="store_true",
         help="after render, upload to YouTube",
     )
+    parser.add_argument(
+        "--allow-edge",
+        action="store_true",
+        help="local testing only: fall back to edge-tts when Gemini TTS fails",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -204,6 +209,9 @@ def main() -> int:
     cfg = load_config(path=args.config, profile=args.profile)
     if args.no_motion:
         cfg.motion.enabled = False
+    if args.allow_edge:
+        log.warning("--allow-edge: edge-tts may stand in for Gemini on failed scenes")
+        cfg.audio.allow_edge_fallback = True
 
     if args.check:
         return run_checks(cfg)

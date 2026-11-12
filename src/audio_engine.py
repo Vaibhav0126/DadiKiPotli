@@ -5,12 +5,14 @@ each scene's duration an exact measured fact instead of something inferred by
 splitting a single track, and it lets the composer lay out the timeline
 without any alignment guesswork.
 
-Primary path is Gemini TTS (raw PCM, no word boundaries). Caption timings are
-then spread evenly across the measured speech duration. If Gemini fails
-(quota, context window, outage), we fall back to edge-tts for the rest of the
-run — edge-tts does report WordBoundary events, which `_align` prefers when
-present. Set `audio.provider: edge` to skip Gemini TTS entirely (used for
-weekly long-form).
+Gemini TTS is the only voice for scheduled runs (raw PCM, no word boundaries).
+Caption timings are then spread evenly across the measured speech duration.
+
+Capacity errors (429 / 5xx) are retried with exponential backoff. If Gemini
+still fails, the scene raises: a skipped day beats a bad voice posted to
+YouTube. edge-tts is never used silently. It is only reached through
+`audio.provider: edge` (a deliberate config choice, used for weekly long-form)
+or `--allow-edge` on a local run.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import os
 import re
 import time
 import wave
@@ -28,9 +31,9 @@ from google import genai
 from google.genai import types
 
 from .config import Config
-from .ffmpeg_util import probe_duration
+from .ffmpeg_util import probe_duration, run
 from .gemini_util import is_capacity_error, is_missing_model
-from .models import SceneAudio, Story, WordTiming, tokenize
+from .models import Line, Scene, SceneAudio, Story, WordTiming, tokenize
 
 log = logging.getLogger(__name__)
 
@@ -39,10 +42,26 @@ _RATE_IN_MIME = re.compile(r"rate=(\d+)", re.IGNORECASE)
 # edge-tts reports offsets in 100-nanosecond ticks.
 TICKS_PER_SECOND = 10_000_000
 
+# Gemini TTS retry policy: 5 tries, waiting 2s, 4s, 8s, 16s between them.
+# The cap keeps any future change from sleeping absurdly long.
+TTS_ATTEMPTS = 5
+TTS_BACKOFF_BASE_S = 2.0
+TTS_BACKOFF_CAP_S = 32.0
+
 # Remember which TTS model worked this process; same pattern as script_engine.
 _active_tts_model: str | None = None
-# Once Gemini fails, stick to edge-tts for remaining scenes in this process.
-_tts_backend: str | None = None  # "gemini" | "edge"
+
+
+class EmptyAudioError(RuntimeError):
+    """Gemini answered without audio. Treated as transient, like a 503."""
+
+
+def _backoff_s(attempt: int) -> float:
+    return min(TTS_BACKOFF_BASE_S * 2**attempt, TTS_BACKOFF_CAP_S)
+
+
+def _is_transient(exc: BaseException) -> bool:
+    return isinstance(exc, EmptyAudioError) or is_capacity_error(exc)
 
 
 class Boundary:
@@ -91,75 +110,96 @@ def _tts_contents(cfg: Config, text: str) -> str:
     return f'{style}\n"{text}"'
 
 
-def _synthesize_gemini(cfg: Config, text: str, dest: Path, attempts: int = 3) -> list[Boundary]:
-    """Call Gemini TTS and write a mono WAV. Returns no word boundaries."""
-    global _active_tts_model
-
-    candidates = [_active_tts_model] if _active_tts_model else list(cfg.audio.models)
-    last_error: Exception | None = None
-
+def _request_pcm(cfg: Config, model: str, contents: str, voice: str) -> tuple[bytes, int]:
+    """One Gemini TTS call. Returns (raw PCM, sample rate)."""
     speech_config = types.SpeechConfig(
         language_code=cfg.audio.language_code or None,
         voice_config=types.VoiceConfig(
             prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                voice_name=cfg.audio.voice,
+                voice_name=voice,
             )
         ),
     )
-    contents = _tts_contents(cfg, text)
+    # Build a fresh client per call: google-genai closes its httpx client on
+    # GC, and a one-liner Client() call can die mid-request.
+    client = _client(cfg)
+    resp = client.models.generate_content(
+        model=model,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=speech_config,
+        ),
+    )
+    # Gemini sometimes answers with no candidates or no parts at all (seen in
+    # practice). That is an empty answer, so it is retried, not a crash.
+    candidates = resp.candidates or []
+    content = candidates[0].content if candidates else None
+    parts = content.parts if content and content.parts else []
+    inline = parts[0].inline_data if parts else None
+    if inline is None or not inline.data:
+        raise EmptyAudioError(f"Gemini TTS ({model}) returned no audio data")
+    pcm = _pcm_bytes(inline.data)
+    if not pcm:
+        raise EmptyAudioError(f"Gemini TTS ({model}) returned empty PCM")
+    return pcm, _sample_rate(inline.mime_type)
 
-    for model in candidates:
+
+def _synthesize_gemini(
+    cfg: Config, text: str, dest: Path, voice: str, attempts: int = TTS_ATTEMPTS
+) -> tuple[list[Boundary], str]:
+    """Call Gemini TTS and write a mono WAV. Returns (no boundaries, model used).
+
+    Transient failures (429, 5xx, empty audio) retry on the same model with
+    exponential backoff, then move to the next configured TTS model. A missing
+    model is skipped at once. Non-transient errors raise immediately. If every
+    model is exhausted the error propagates, and the caller decides what happens
+    next.
+    """
+    global _active_tts_model
+
+    ordered: list[str] = []
+    for model in [_active_tts_model, *cfg.audio.models]:
+        if model and model not in ordered:
+            ordered.append(model)
+
+    contents = _tts_contents(cfg, text)
+    last_error: Exception | None = None
+
+    for model in ordered:
         for attempt in range(attempts):
             try:
-                # Keep a strong reference: google-genai closes its httpx client
-                # on GC, and a one-liner Client() call can die mid-request.
-                client = _client(cfg)
-                resp = client.models.generate_content(
-                    model=model,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["AUDIO"],
-                        speech_config=speech_config,
-                    ),
-                )
-                part = resp.candidates[0].content.parts[0]
-                inline = part.inline_data
-                if inline is None or not inline.data:
-                    raise RuntimeError("Gemini TTS returned no audio data")
-                pcm = _pcm_bytes(inline.data)
-                if not pcm:
-                    raise RuntimeError("Gemini TTS returned empty PCM")
-                _write_wav(dest, pcm, _sample_rate(inline.mime_type))
-                if _active_tts_model != model:
-                    log.info("using Gemini TTS model: %s (%s)", model, cfg.audio.voice)
-                    _active_tts_model = model
-                return []
-            except Exception as exc:  # noqa: BLE001 - retried / model-fallback
+                pcm, rate = _request_pcm(cfg, model, contents, voice)
+            except Exception as exc:  # noqa: BLE001 - classified below
                 last_error = exc
-                if is_capacity_error(exc):
-                    # Don't grind through every model on a provider outage —
-                    # let _synthesize switch to edge-tts immediately.
-                    log.warning(
-                        "Gemini TTS capacity/unavailable (%s); aborting Gemini TTS",
-                        exc,
-                    )
-                    raise
                 if is_missing_model(exc):
-                    log.debug("TTS model %s unavailable, trying next", model)
+                    log.warning("Gemini TTS model %s unavailable, trying next", model)
                     break
-                wait = 2**attempt
+                if not _is_transient(exc):
+                    raise
+                if attempt + 1 == attempts:
+                    log.warning(
+                        "Gemini TTS %s still failing after %d tries (%s)",
+                        model, attempts, exc,
+                    )
+                    break
+                wait = _backoff_s(attempt)
                 log.warning(
-                    "Gemini TTS attempt %d on %s failed (%s), retrying in %ss",
-                    attempt + 1,
-                    model,
-                    exc,
-                    wait,
+                    "Gemini TTS %s try %d/%d failed (%s), retrying in %.0fs",
+                    model, attempt + 1, attempts, exc, wait,
                 )
                 time.sleep(wait)
+                continue
+
+            _write_wav(dest, pcm, rate)
+            if _active_tts_model != model:
+                log.info("using Gemini TTS model: %s", model)
+                _active_tts_model = model
+            return [], model
 
     raise RuntimeError(
-        f"Gemini TTS failed after trying {', '.join(cfg.audio.models)}: {last_error}. "
-        "Check GEMINI_API_KEY and audio.models / audio.voice in config.yaml."
+        f"Gemini TTS failed on every model ({', '.join(ordered)}): {last_error}. "
+        "Check GEMINI_API_KEY, audio.models and audio.voice in config.yaml."
     ) from last_error
 
 
@@ -211,37 +251,49 @@ async def _synthesize_edge(
     ) from last_error
 
 
-def _synthesize(
-    cfg: Config, text: str, dest_stem: Path, attempts: int = 3
-) -> tuple[list[Boundary], Path]:
-    """Try Gemini TTS first; on failure fall back to edge-tts for this run.
+class SceneSpeech:
+    """One scene's synthesized narration plus where it came from."""
 
-    `audio.provider: edge` skips Gemini and uses edge-tts for every scene.
+    __slots__ = ("boundaries", "path", "backend", "voice")
+
+    def __init__(self, boundaries: list[Boundary], path: Path, backend: str, voice: str) -> None:
+        self.boundaries = boundaries
+        self.path = path
+        self.backend = backend
+        self.voice = voice
+
+
+def _synthesize(cfg: Config, text: str, dest_stem: Path, voice: str | None = None) -> SceneSpeech:
+    """Synthesize one scene with Gemini TTS.
+
+    Edge-tts runs only in two explicit cases, never as a silent fallback:
+    `audio.provider: edge` (configured), or `allow_edge_fallback` after a Gemini
+    failure (the `--allow-edge` local-testing flag). Otherwise a Gemini failure
+    raises, which skips the scheduled run instead of posting a bad voice.
     """
-    global _tts_backend
-
     if cfg.audio.provider == "edge":
-        if _tts_backend != "edge":
-            log.info("using edge-tts only (%s)", cfg.audio.fallback_voice)
-        _tts_backend = "edge"
+        dest = dest_stem.with_suffix(".mp3")
+        boundaries = asyncio.run(_synthesize_edge(cfg, text, dest))
+        return SceneSpeech(boundaries, dest, "edge", cfg.audio.fallback_voice)
 
-    if _tts_backend != "edge":
-        dest = dest_stem.with_suffix(".wav")
-        try:
-            boundaries = _synthesize_gemini(cfg, text, dest, attempts=attempts)
-            _tts_backend = "gemini"
-            return boundaries, dest
-        except Exception as exc:  # noqa: BLE001 - intentional provider fallback
-            log.warning(
-                "Gemini TTS unavailable (%s); falling back to edge-tts (%s)",
-                exc,
-                cfg.audio.fallback_voice,
-            )
-            _tts_backend = "edge"
-
-    dest = dest_stem.with_suffix(".mp3")
-    boundaries = asyncio.run(_synthesize_edge(cfg, text, dest, attempts=attempts))
-    return boundaries, dest
+    voice = voice or cfg.audio.voice
+    dest = dest_stem.with_suffix(".wav")
+    try:
+        boundaries, model = _synthesize_gemini(cfg, text, dest, voice)
+        return SceneSpeech(boundaries, dest, f"gemini:{model}", voice)
+    except Exception as exc:
+        if not cfg.audio.allow_edge_fallback:
+            raise RuntimeError(
+                f"Gemini TTS failed for this scene and edge-tts fallback is off: {exc}"
+            ) from exc
+        log.warning(
+            "Gemini TTS failed (%s); --allow-edge set, using edge-tts (%s) for this scene",
+            exc,
+            cfg.audio.fallback_voice,
+        )
+        dest = dest_stem.with_suffix(".mp3")
+        boundaries = asyncio.run(_synthesize_edge(cfg, text, dest))
+        return SceneSpeech(boundaries, dest, "edge-fallback", cfg.audio.fallback_voice)
 
 
 def _align(
@@ -322,22 +374,116 @@ def _align(
     return timings
 
 
+def voice_for(cfg: Config, speaker: str) -> str:
+    """The Gemini voice for a line's speaker. Narration is the narrator voice."""
+    if speaker in ("", "narrator"):
+        return cfg.audio.voice
+    return cfg.audio.character_voices.get(speaker, cfg.audio.dialogue_voice)
+
+
+def _speed_up(path: Path, tempo: float) -> None:
+    """Speed a rendered line up in place. atempo keeps the pitch."""
+    if abs(tempo - 1.0) < 1e-6:
+        return
+    tmp = path.with_name(f"{path.stem}.fast{path.suffix}")
+    run(["-i", str(path), "-af", f"atempo={tempo:.3f}", str(tmp)], label="tempo")
+    os.replace(tmp, path)
+
+
+def _speak_line(cfg: Config, line: Line, dest_stem: Path) -> SceneSpeech:
+    """Voice one line with its speaker's voice, then apply the speed-up.
+
+    If Gemini rejects a dialogue voice, the line is voiced by the narrator
+    instead, so a bad voice name costs a line's character, not the whole day.
+    """
+    voice = voice_for(cfg, line.speaker)
+    try:
+        spoken = _synthesize(cfg, line.hindi, dest_stem, voice)
+    except Exception as exc:
+        if voice == cfg.audio.voice:
+            raise
+        log.warning(
+            "voice %s failed for %s (%s); using the narrator voice for this line",
+            voice, line.speaker, exc,
+        )
+        spoken = _synthesize(cfg, line.hindi, dest_stem, cfg.audio.voice)
+
+    _speed_up(spoken.path, cfg.audio.tempo)
+    if abs(cfg.audio.tempo - 1.0) > 1e-6:
+        # Edge boundaries were measured on the unsped audio; rescale them.
+        spoken.boundaries = [
+            Boundary(b.text, b.start / cfg.audio.tempo, b.end / cfg.audio.tempo)
+            for b in spoken.boundaries
+        ]
+    return spoken
+
+
+def _concat_lines(paths: list[Path], dest: Path, gap_s: float) -> None:
+    """Join a scene's line audio into one WAV, with a short gap between lines."""
+    inputs: list[str] = []
+    steps: list[str] = []
+    labels: list[str] = []
+    last = len(paths) - 1
+    for i, path in enumerate(paths):
+        inputs += ["-i", str(path)]
+        pad = f",apad=pad_dur={gap_s:.3f}" if i < last and gap_s > 0 else ""
+        steps.append(f"[{i}:a]aformat=sample_rates=24000:channel_layouts=mono{pad}[a{i}]")
+        labels.append(f"[a{i}]")
+    if len(paths) == 1:
+        steps.append("[a0]anull[aout]")
+    else:
+        steps.append(f"{''.join(labels)}concat=n={len(paths)}:v=0:a=1[aout]")
+    run(
+        [*inputs, "-filter_complex", ";".join(steps), "-map", "[aout]",
+         "-c:a", "pcm_s16le", str(dest)],
+        label="scene lines",
+    )
+
+
+def _speak_scene(cfg: Config, scene: Scene, out_dir: Path) -> tuple[Path, float, list[WordTiming]]:
+    """Voice every line of a scene. Returns (scene WAV, speech seconds, word timings).
+
+    Word timings are computed per line from that line's measured length and then
+    placed on the scene's own clock, so captions follow the real audio.
+    """
+    number = scene.scene_number
+    paths: list[Path] = []
+    line_durations: list[float] = []
+    line_words: list[list[WordTiming]] = []
+
+    for k, line in enumerate(scene.speech_lines(), start=1):
+        spoken = _speak_line(cfg, line, out_dir / f"scene_{number:02d}_line_{k:02d}")
+        duration = probe_duration(spoken.path)
+        log.info(
+            "scene %d line %d (%s): backend=%s voice=%s, %.2fs",
+            number, k, line.speaker, spoken.backend, spoken.voice, duration,
+        )
+        line_words.append(
+            _align(spoken.boundaries, tokenize(line.hindi), tokenize(line.hinglish), duration)
+        )
+        paths.append(spoken.path)
+        line_durations.append(duration)
+
+    scene_wav = out_dir / f"scene_{number:02d}.wav"
+    _concat_lines(paths, scene_wav, cfg.audio.line_gap_s)
+    speech = probe_duration(scene_wav)
+
+    words: list[WordTiming] = []
+    offset = 0.0
+    for duration, timings in zip(line_durations, line_words):
+        for w in timings:
+            words.append(WordTiming(word=w.word, start=w.start + offset, end=w.end + offset))
+        offset += duration + cfg.audio.line_gap_s
+    return scene_wav, speech, words
+
+
 def _build(cfg: Config, story: Story, out_dir: Path) -> list[SceneAudio]:
     out_dir.mkdir(parents=True, exist_ok=True)
     scenes: list[SceneAudio] = []
     cursor = 0.0
 
     for scene in story.scenes:
-        dest_stem = out_dir / f"scene_{scene.scene_number:02d}"
-        boundaries, dest = _synthesize(cfg, scene.hindi_narration, dest_stem)
-        speech = probe_duration(dest)
-
-        words = _align(
-            boundaries,
-            tokenize(scene.hindi_narration),
-            tokenize(scene.hinglish_caption),
-            speech,
-        )
+        dest, speech, words = _speak_scene(cfg, scene, out_dir)
         # Clamp to the real audio length, then shift onto the global timeline.
         for w in words:
             w.start = min(w.start, speech)
@@ -356,7 +502,10 @@ def _build(cfg: Config, story: Story, out_dir: Path) -> list[SceneAudio]:
                 words=words,
             )
         )
-        log.info("scene %d: %.2fs narration, %d words", scene.scene_number, speech, len(words))
+        log.info(
+            "scene %d: %.2fs speech, %d lines, %d words",
+            scene.scene_number, speech, len(scene.speech_lines()), len(words),
+        )
         cursor += slot
 
     return scenes

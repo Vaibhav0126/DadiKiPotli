@@ -32,6 +32,18 @@ FAL_QUEUE = "https://queue.fal.run"
 # the same way. Expressions are in terms of `on` (output frame) and TOTAL.
 KEN_BURNS = ["zoom_in", "pan_right", "zoom_out", "pan_left"]
 
+# Scene 1 gets a punch-in instead of a Ken Burns move: the viewer's first frame
+# lands hard, with a camera shake and a white flash.
+PUNCH_IN = "punch_in"
+
+# Strength of the Ken Burns move. 0.25 is clearly visible on a phone screen;
+# the old 0.14 read as nearly static.
+KEN_BURNS_AMOUNT = 0.25
+PUNCH_IN_ZOOM = 0.35  # starts at 1.35x and settles to 1.0x
+PUNCH_IN_SECONDS = 0.5
+PUNCH_IN_SHAKE_PX = 18  # in the 1.5x-upscaled source frame
+FLASH_FRAMES = 4
+
 
 def _fal_submit(cfg: Config, image: Path, prompt: str) -> str:
     key = cfg.fal_key
@@ -134,33 +146,66 @@ def ken_burns_filter(cfg: Config, duration: float, variant: str) -> str:
     Zoom is driven by the output frame number rather than by accumulating
     `zoom+step`, which drifts and visibly jitters on longer holds.
     """
-    w, h, fps = cfg.video.width, cfg.video.height, cfg.video.fps
+    if variant == PUNCH_IN:
+        return punch_in_filter(cfg, duration)
+
+    fps = cfg.video.fps
     frames = max(int(round(duration * fps)), 2)
-    amount = 0.14
-    progress = f"(on/{frames})"
+    amount = KEN_BURNS_AMOUNT
+    # Ease-out: the move starts quickly and settles, rather than drifting at a
+    # constant speed. `e` runs from 0 to 1 over the segment.
+    p = f"(on/{frames})"
+    e = f"(1-pow(1-{p},2))"
 
     if variant == "zoom_in":
-        z = f"1+{amount}*{progress}"
+        z = f"1+{amount}*{e}"
         x, y = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
     elif variant == "zoom_out":
-        z = f"{1 + amount}-{amount}*{progress}"
+        z = f"{1 + amount}-{amount}*{e}"
         x, y = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
     elif variant == "pan_right":
         z = f"{1 + amount}"
-        x, y = f"(iw-iw/zoom)*{progress}", "ih/2-(ih/zoom/2)"
+        x, y = f"(iw-iw/zoom)*{e}", "ih/2-(ih/zoom/2)"
     else:  # pan_left
         z = f"{1 + amount}"
-        x, y = f"(iw-iw/zoom)*(1-{progress})", "ih/2-(ih/zoom/2)"
+        x, y = f"(iw-iw/zoom)*(1-{e})", "ih/2-(ih/zoom/2)"
 
+    return _zoompan_chain(cfg, z, x, y, fps)
+
+
+def punch_in_filter(cfg: Config, duration: float) -> str:
+    """Scene 1: a fast punch-in from 1.35x to 1.0x, with a decaying shake.
+
+    The zoom and shake both run over PUNCH_IN_SECONDS and then hold still, so the
+    narration lands on a settled frame. A white flash is drawn over the first
+    FLASH_FRAMES frames.
+    """
+    fps = cfg.video.fps
+    half = max(PUNCH_IN_SECONDS * fps, 1.0)
+    # Progress through the punch-in, clamped to 1.0 once it has settled.
+    p = f"min(on/{half:.3f},1)"
+    z = f"1+{PUNCH_IN_ZOOM}*pow(1-{p},2)"
+    shake = f"{PUNCH_IN_SHAKE_PX}*(1-{p})*sin(on*2.3)"
+    x = f"iw/2-(iw/zoom/2)+{shake}"
+    y = f"ih/2-(ih/zoom/2)+{shake}*0.6"
+    return _zoompan_chain(cfg, z, x, y, fps, flash=True)
+
+
+def _zoompan_chain(cfg: Config, z: str, x: str, y: str, fps: int, *, flash: bool = False) -> str:
+    w, h = cfg.video.width, cfg.video.height
     # Upscaling first means zoompan crops from a larger source and scales
     # *down* into frame, which stays sharp. Straight from the 832x1472 still it
     # would be scaling up and would look soft. Costs about 0.1s per segment.
-    return (
+    chain = (
         f"fps={fps},"
         f"scale={int(w * 1.5)}:{int(h * 1.5)}:flags=lanczos,"
-        f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={w}x{h}:fps={fps},"
-        f"setsar=1"
+        f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={w}x{h}:fps={fps}"
     )
+    if flash:
+        # `n` counts frames inside this segment, so the flash is always the
+        # first few frames of the scene, whatever comes before it in the video.
+        chain += f",drawbox=x=0:y=0:w=iw:h=ih:color=white@1:t=fill:enable='lt(n,{FLASH_FRAMES})'"
+    return f"{chain},setsar=1"
 
 
 def build_still_segment(

@@ -14,9 +14,10 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
+from .characters import detect_character
 from .config import ROOT, Config
 from .gemini_util import generate_with_fallback
-from .models import Scene, Story, StoryDraft, slugify, tokenize
+from .models import Line, Scene, Story, StoryDraft, slugify, tokenize
 from .romanize import fallback_romanize
 
 log = logging.getLogger(__name__)
@@ -81,49 +82,101 @@ def _generate_draft(cfg: Config, idea: str, nudge: str = "") -> StoryDraft:
     draft = resp.parsed
     if draft is None:
         raise RuntimeError(f"Gemini returned no parsable story. Raw text:\n{resp.text}")
-    return draft
+    return draft.model_copy(update={"scenes": [_sync_scene(s) for s in draft.scenes]})
 
 
-def _repair_scene(cfg: Config, scene: Scene) -> Scene:
-    """Ask for a fresh romanisation of one scene whose word counts disagreed."""
-    hi_tokens = tokenize(scene.hindi_narration)
-    resp = _call(
-        cfg,
-        contents=(
-            "Romanise this Hindi sentence into Hinglish, word for word.\n\n"
-            f"Hindi: {scene.hindi_narration}\n\n"
-            f"It has exactly {len(hi_tokens)} words: {' | '.join(hi_tokens)}\n\n"
-            f"Return exactly {len(hi_tokens)} space-separated Hinglish words in the same "
-            "order, and nothing else. Do not translate to English. Spell it the way "
-            "Indians type casually (kya, nahi, hai, raja)."
-        ),
-        config=types.GenerateContentConfig(temperature=0.2),
-    )
-    candidate = (resp.text or "").strip().replace("\n", " ")
-    patched = scene.model_copy(update={"hinglish_caption": candidate})
-    if patched.parity_ok():
-        return patched
+# Openers that made the first seconds of every video look the same. Checked in
+# both scripts, case-insensitively, against scene 1 only.
+BANNED_OPENERS = (
+    "क्या आप जानते हैं",
+    "क्या आपको पता है",
+    "एक बार की बात है",
+    "kya aap jaante hain",
+    "kya aapko pata hai",
+    "ek baar ki baat hai",
+)
 
-    # Last resort: a character mapper that is ugly but structurally exact.
-    log.warning("scene %d: falling back to rule-based romanisation", scene.scene_number)
+
+def _is_betaal(draft: StoryDraft, idea: str) -> bool:
+    if detect_character(idea) == "Vikram-Betaal":
+        return True
+    return any(detect_character(c.name) == "Vikram-Betaal" for c in draft.characters)
+
+
+def rule_problems(draft: StoryDraft, idea: str) -> list[str]:
+    """Hard rules from the prompt that regenerating can fix. Empty when all pass."""
+    problems: list[str] = []
+    if not draft.scenes:
+        return ["the story has no scenes"]
+
+    first = draft.scenes[0]
+    scene_text = f"{first.hindi_narration} {first.hinglish_caption}".casefold()
+    for opener in BANNED_OPENERS:
+        if opener.casefold() in scene_text:
+            problems.append(f"scene 1 uses the banned opener '{opener}'")
+
+    last = draft.scenes[-1]
+    if _is_betaal(draft, idea):
+        if "comment" not in last.hinglish_caption.casefold() and "कमेंट" not in last.hindi_narration:
+            problems.append("a Vikram-Betaal story must end by asking the viewer to comment")
+    elif "?" not in last.hindi_narration:
+        problems.append("the story must end with a question to the viewer")
+    return problems
+
+
+def _checked_draft(cfg: Config, idea: str, nudge: str = "") -> StoryDraft:
+    """Generate a draft that passes the hard rules, regenerating when it does not.
+
+    After the retries are spent this raises rather than returning a script that
+    breaks the rules. The daily run then skips the day, which beats posting it.
+    """
+    rules_note = ""
+    problems: list[str] = []
+    for attempt in range(cfg.story.max_script_retries + 1):
+        draft = _generate_draft(cfg, idea, nudge + rules_note)
+        problems = rule_problems(draft, idea)
+        if not problems:
+            return draft
+        log.warning("draft %d broke script rules: %s", attempt + 1, "; ".join(problems))
+        rules_note = (
+            "\n\nYour last draft broke these rules. Fix every one: "
+            + "; ".join(problems)
+            + "."
+        )
+    raise RuntimeError(f"script kept breaking the rules: {'; '.join(problems)}")
+
+
+def _sync_scene(scene: Scene) -> Scene:
+    """Make the scene-level text the join of its lines, so the two never disagree."""
+    lines = scene.speech_lines()
     return scene.model_copy(
-        update={"hinglish_caption": fallback_romanize(scene.hindi_narration)}
+        update={
+            "lines": lines,
+            "hindi_narration": " ".join(line.hindi for line in lines),
+            "hinglish_caption": " ".join(line.hinglish for line in lines),
+        }
     )
+
+
+def _repair_lines(scene: Scene) -> Scene:
+    """Rebuild the Hinglish of any line whose word count disagrees with its Hindi.
+
+    Each bad line is romanised by the rule-based mapper, which is ugly but keeps
+    the count exact. Line-level repair is the cheapest reliable fix: it leaves
+    the rest of the scene untouched and needs no extra Gemini call.
+    """
+    fixed: list[Line] = []
+    for line in scene.speech_lines():
+        if line.parity_ok():
+            fixed.append(line)
+            continue
+        log.info("scene %d: line word counts differ, romanising that line by rule", scene.scene_number)
+        fixed.append(line.model_copy(update={"hinglish": fallback_romanize(line.hindi)}))
+    return _sync_scene(scene.model_copy(update={"lines": fixed}))
 
 
 def _enforce_parity(cfg: Config, draft: StoryDraft) -> StoryDraft:
-    fixed = []
-    for scene in draft.scenes:
-        if scene.parity_ok():
-            fixed.append(scene)
-            continue
-        log.info(
-            "scene %d: caption/narration word counts differ (%d vs %d), repairing",
-            scene.scene_number,
-            len(tokenize(scene.hindi_narration)),
-            len(tokenize(scene.hinglish_caption)),
-        )
-        fixed.append(_repair_scene(cfg, scene))
+    fixed = [scene if scene.parity_ok() else _repair_lines(scene) for scene in draft.scenes]
     return draft.model_copy(update={"scenes": fixed})
 
 
@@ -172,7 +225,7 @@ def generate_story(cfg: Config, idea: str) -> Story:
     draft: StoryDraft | None = None
 
     for attempt in range(cfg.story.max_script_retries + 1):
-        draft = _generate_draft(cfg, idea, nudge)
+        draft = _checked_draft(cfg, idea, nudge)
         words = sum(len(tokenize(s.hindi_narration)) for s in draft.scenes)
         log.info(
             "draft %d: %d scenes, %d Hindi words", attempt + 1, len(draft.scenes), words
@@ -217,7 +270,7 @@ def revise_for_duration(cfg: Config, story: Story, measured: float) -> Story:
         f"{direction}: aim for about {int(words * ratio)} Hindi words total. Keep the "
         "same beats and the same twist."
     )
-    draft = _generate_draft(cfg, story.idea, nudge)
+    draft = _checked_draft(cfg, story.idea, nudge)
     draft = _enforce_parity(cfg, draft)
     draft = _mark_hero_scenes(cfg, draft)
     draft = draft.model_copy(

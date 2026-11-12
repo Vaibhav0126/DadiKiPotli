@@ -58,6 +58,12 @@ class AudioCfg(BaseModel):
     fallback_voice: str = "hi-IN-SwaraNeural"
     fallback_rate: str = "+20%"
     fallback_pitch: str = "+0Hz"
+    # Local testing only (`--allow-edge`). Off means a Gemini failure is fatal.
+    allow_edge_fallback: bool = False
+    tempo: float = 1.0
+    dialogue_voice: str = "Puck"
+    character_voices: dict[str, str] = {}
+    line_gap_s: float = 0.12
     scene_gap_s: float = 0.25
 
     @field_validator("provider")

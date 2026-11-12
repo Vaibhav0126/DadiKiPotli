@@ -21,14 +21,24 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from pydantic import BaseModel, Field
 
+from .characters import DISPLAY_NAMES, detect_character
 from .config import Config
 from .gemini_util import generate_with_fallback
 from .models import Story, read_json, write_json
 
 log = logging.getLogger(__name__)
 
-YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+# youtube.readonly lets performance.py read view counts. The token must be
+# re-issued (tools.auth_youtube) before it carries this scope.
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+]
 YOUTUBE_CATEGORY_ENTERTAINMENT = "24"
+
+# Keeps "<Name> Ki Kahani | <hook> | हिंदी कहानी #Shorts" under YouTube's 100 chars.
+SHORTS_HOOK_MAX = 40
+DEFAULT_COMMENT_QUESTION = "आपको क्या लगता है? कमेंट में बताइए!"
 
 _active_model: str | None = None
 
@@ -37,6 +47,10 @@ class PublishMeta(BaseModel):
     youtube_title: str
     youtube_description: str
     youtube_tags: list[str] = Field(default_factory=list)
+    # Shorts only: a short Hinglish hook for the title, and the question that
+    # goes in the description to invite comments.
+    hook: str = ""
+    comment_question: str = ""
 
 
 class PublishResult(BaseModel):
@@ -114,6 +128,10 @@ def build_metadata(cfg: Config, story: Story, cache_path: Path, *, force: bool) 
             f"Suggested tags to include: {default_tags}\n\n"
             f"Rules:\n"
             f"- youtube_title: catchy Hinglish, max 90 chars before hashtag, must work as a Shorts title.\n"
+            f"- hook: a Hinglish curiosity hook of at most {SHORTS_HOOK_MAX} characters that makes "
+            f"someone stop scrolling. No spoilers of the twist.\n"
+            f"- comment_question: one Hinglish question to the viewer that invites an opinion in the "
+            f"comments, for example 'Aapko kya lagta hai, Birbal kaise jeetega?'\n"
             f"- youtube_description: 2-4 short lines + moral tease + hashtags. Include #Shorts.\n"
             f"- youtube_tags: 8-12 lowercase-ish keywords, no # signs.\n"
             f"- No spoilers of the twist ending.\n"
@@ -155,16 +173,50 @@ def build_metadata(cfg: Config, story: Story, cache_path: Path, *, force: bool) 
         log.warning("metadata generation failed (%s); using story fields", exc)
         meta = _fallback_meta(cfg, story)
 
-    meta = meta.model_copy(
-        update={
-            "youtube_title": _clamp_title(meta.youtube_title, shorts=shorts),
-            "youtube_tags": list(
-                dict.fromkeys([*meta.youtube_tags, *cfg.publish.youtube.default_tags])
-            ),
-        }
-    )
+    update = {
+        "youtube_title": _clamp_title(meta.youtube_title, shorts=shorts),
+        "youtube_tags": list(
+            dict.fromkeys([*meta.youtube_tags, *cfg.publish.youtube.default_tags])
+        ),
+    }
+    if shorts:
+        update["youtube_title"] = _shorts_title(story, meta.hook)
+        update["youtube_description"] = _shorts_description(story, meta)
+    meta = meta.model_copy(update=update)
     write_json(cache_path, meta)
     return meta
+
+
+def _character_for(story: Story) -> str | None:
+    """The story's family, from its idea first, then its character names."""
+    found = detect_character(story.idea)
+    if found:
+        return found
+    return next((detect_character(c.name) for c in story.characters if detect_character(c.name)), None)
+
+
+def _shorts_title(story: Story, hook: str) -> str:
+    """'<Name> Ki Kahani | <hook> | हिंदी कहानी #Shorts', searchable in Hinglish and Hindi."""
+    hook = " ".join(hook.split())[:SHORTS_HOOK_MAX].rstrip(" -|:,.")
+    if not hook:
+        hook = story.title_hinglish
+    label = DISPLAY_NAMES.get(_character_for(story) or "", "")
+    if label:
+        title = f"{label} Ki Kahani | {hook} | हिंदी कहानी #Shorts"
+    else:
+        title = f"{hook} | हिंदी कहानी #Shorts"
+    return _clamp_title(title, shorts=True)
+
+
+def _shorts_description(story: Story, meta: PublishMeta) -> str:
+    """Two lines: the hook, then the comment question. Hashtags follow."""
+    question = " ".join(meta.comment_question.split()) or DEFAULT_COMMENT_QUESTION
+    hook = " ".join(meta.hook.split()) or story.title_hinglish
+    tags = ["#Shorts", "#HindiStories"]
+    label = DISPLAY_NAMES.get(_character_for(story) or "", "")
+    if label:
+        tags.append("#" + "".join(label.split()))
+    return f"{hook}\n{question}\n\n{' '.join(tags)}"
 
 
 def youtube_credentials(cfg: Config, *, interactive: bool = False) -> Credentials:

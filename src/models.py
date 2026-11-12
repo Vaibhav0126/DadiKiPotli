@@ -36,25 +36,47 @@ class Character(BaseModel):
     visual_description: str
 
 
+class Line(BaseModel):
+    """One spoken line. Each line is its own TTS call, with its own voice."""
+
+    # "narrator" for narration, or the exact name of a character for dialogue.
+    speaker: str = "narrator"
+    hindi: str
+    hinglish: str
+
+    def parity_ok(self) -> bool:
+        return len(tokenize(self.hindi)) == len(tokenize(self.hinglish))
+
+
 class Scene(BaseModel):
     scene_number: int
     beat: Beat
+    # The scene's full text: the lines joined. Kept for the word-count limit,
+    # the rule checks and older readers. script_engine keeps it in sync with lines.
     hindi_narration: str
     hinglish_caption: str
     image_prompt: str
     characters_present: list[str] = Field(default_factory=list)
+    # Spoken lines in order. Empty for older scripts; speech_lines() then
+    # treats the whole scene as one narrator line.
+    lines: list[Line] = Field(default_factory=list)
     # Gemini's own 1-5 read on how much the scene would gain from motion.
     # motion_engine animates the top N and leaves the rest on Ken Burns.
     visual_impact: int = 3
     is_hero: bool = False
 
-    def parity_ok(self) -> bool:
-        """Whether caption tokens line up 1:1 with narration tokens.
+    def speech_lines(self) -> list[Line]:
+        if self.lines:
+            return self.lines
+        return [Line(speaker="narrator", hindi=self.hindi_narration, hinglish=self.hinglish_caption)]
 
-        Caption timings are spread across measured speech duration from
-        Gemini TTS, so index i of each must refer to the same word.
+    def parity_ok(self) -> bool:
+        """Whether caption tokens line up 1:1 with narration tokens, line by line.
+
+        Caption timings are spread across each line's measured audio, so index i
+        of each must refer to the same word within that line.
         """
-        return len(tokenize(self.hindi_narration)) == len(tokenize(self.hinglish_caption))
+        return all(line.parity_ok() for line in self.speech_lines())
 
 
 class StoryDraft(BaseModel):
