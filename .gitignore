@@ -8,6 +8,8 @@ secrets/*
 !secrets/.gitkeep
 assets/music/*
 !assets/music/.gitkeep
+# Synthesized at build time by src/sfx.py, never committed.
+assets/sfx/
 # Caption font is required in CI; keep Poppins tracked.
 assets/fonts/*
 !assets/fonts/.gitkeep

@@ -1,0 +1,14 @@
+# Famous classic tales used for the retelling half of the daily queue.
+# One per line: Character | premise type | the one-line idea sent to the script writer.
+# Premise types: trick, rescue, test_of_wits, comeuppance, riddle.
+# Each classic is posted once; ideas_used.txt records which ones are done.
+# Please check the wording against the versions you want to retell.
+
+Akbar-Birbal | test_of_wits | Akbar asks Birbal to count the crows in the capital, and Birbal gives a number nobody can check.
+Akbar-Birbal | trick | A poor man smells a shopkeeper's food and is made to pay for it with the sound of coins.
+Akbar-Birbal | riddle | Akbar asks why Birbal's khichdi takes so long to cook, and Birbal must explain himself before the court.
+Tenali Raman | trick | A ghost is said to haunt the palace, and Tenali must spend a night there without losing his nerve or his purse.
+Tenali Raman | comeuppance | A greedy man sells the king a cure that does nothing, and Tenali makes him pay for his own lie.
+Tenali Raman | rescue | Tenali saves a cat that is about to be blamed for stealing the milk, and proves who really did it.
+Vikram-Betaal | riddle | Betaal tells Vikram of a woman with three husbands and asks which one she belongs to, or he will be cursed.
+Vikram-Betaal | test_of_wits | Vikram must carry Betaal across a forest, and the corpse tells him a riddle at every step.

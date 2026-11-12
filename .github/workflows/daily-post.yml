@@ -1,9 +1,10 @@
 name: Daily Short
 
-# Posts one Hindi story Short to YouTube every day at 13:00 JST (04:00 UTC).
+# Posts one Hindi story Short to YouTube every day at 13:30 UTC (19:00 IST, the
+# evening peak). Keep in step with src/schedule.py (PUBLISH_HOUR_UTC/MINUTE_UTC).
 on:
   schedule:
-    - cron: "0 4 * * *"
+    - cron: "30 13 * * *"
   workflow_dispatch:
     inputs:
       idea:
@@ -96,14 +97,18 @@ jobs:
           fi
           python -m tools.daily_post "${ARGS[@]}"
 
-      - name: Commit idea queue updates
+      - name: Commit idea queue and performance updates
         run: |
-          if git diff --quiet -- ideas.txt ideas_used.txt; then
-            echo "No idea-queue changes to commit"
+          # data/uploads.json holds each upload's plan and its latest view counts,
+          # which the next run reads to weight its choices. It may not exist yet
+          # on the first run, so stage it only when present.
+          git add ideas.txt ideas_used.txt
+          if [ -f data/uploads.json ]; then git add data/uploads.json; fi
+          if git diff --cached --quiet; then
+            echo "No queue or performance changes to commit"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ideas.txt ideas_used.txt
           git commit -m "chore: record daily posted idea"
           git push
