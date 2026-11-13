@@ -7,6 +7,10 @@ Used by the daily Shorts Action and the Sunday long-form Action:
     python -m tools.daily_post --idea "..."
     python -m tools.daily_post --from-queue
     python -m tools.daily_post --no-motion
+    python -m tools.daily_post --resume
+
+--resume continues the one saved run left in work/ (its idea.txt and plan.json),
+so finished script and narration steps are reused instead of paid for again.
 
 By default the next post is planned by src/ideas.py: about half the time a
 famous classic from prompts/classics.txt (each one once), otherwise a new story.
@@ -23,10 +27,12 @@ Long profile:  ideas_long.txt / ideas_long_used.txt
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import random
 import sys
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -37,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import performance  # noqa: E402
 from src.characters import DISPLAY_NAMES, detect_character  # noqa: E402
-from src.config import ROOT, Config, load_config, work_dir  # noqa: E402
+from src.config import ROOT, WORK, Config, load_config, work_dir  # noqa: E402
 from src.ffmpeg_util import FFmpegError, ensure_available  # noqa: E402
 from src.gemini_util import generate_with_fallback  # noqa: E402
 from src.ideas import (  # noqa: E402
@@ -63,6 +69,8 @@ QUEUES = {
     "long": (ROOT / "ideas_long.txt", ROOT / "ideas_long_used.txt"),
 }
 CLASSICS_FILE = ROOT / "prompts" / "classics.txt"
+IDEA_FILE = "idea.txt"
+PLAN_FILE = "plan.json"
 
 _MAX_INVENT_ATTEMPTS = 6
 
@@ -190,6 +198,25 @@ def _scores(cfg: Config, profile: str) -> Scores:
 def _plan_for_override(idea: str) -> Plan:
     """A plan for an idea we did not plan: family from its text, premise unknown."""
     return Plan("new", detect_character(idea) or "", "")
+
+
+def _save_plan(idea: str, plan: Plan) -> None:
+    """Keep the idea and plan beside the story files, so a failed run can resume."""
+    wd = work_dir(slugify(idea))
+    (wd / IDEA_FILE).write_text(idea, encoding="utf-8")
+    (wd / PLAN_FILE).write_text(json.dumps(asdict(plan), ensure_ascii=False), encoding="utf-8")
+
+
+def _resume_point() -> tuple[str, Plan]:
+    """The idea and plan of the one saved run in work/ that did not finish."""
+    saved = sorted(WORK.glob(f"*/{IDEA_FILE}"))
+    if len(saved) != 1:
+        raise RuntimeError(f"--resume needs exactly one saved idea in work/, found {len(saved)}")
+    wd = saved[0].parent
+    idea = saved[0].read_text(encoding="utf-8").strip()
+    plan_path = wd / PLAN_FILE
+    plan = Plan(**json.loads(plan_path.read_text(encoding="utf-8"))) if plan_path.exists() else None
+    return idea, plan or _plan_for_override(idea)
 
 
 def _record_upload(idea: str, plan: Plan) -> None:
@@ -358,6 +385,11 @@ def main() -> int:
         action="store_true",
         help="do not append the idea to the used list after success",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue the saved idea in work/ instead of planning a new one",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -385,9 +417,14 @@ def main() -> int:
         log.error("%s", exc)
         return 1
 
-    idea, plan = next_idea(cfg, args.idea, from_queue=args.from_queue, profile=profile)
+    if args.resume:
+        idea, plan = _resume_point()
+        log.info("resuming saved idea: %s", idea)
+    else:
+        idea, plan = next_idea(cfg, args.idea, from_queue=args.from_queue, profile=profile)
     log.info("profile: %s (%s)", profile, "16:9 long" if profile == "long" else "9:16 short")
     log.info("idea: %s", idea)
+    _save_plan(idea, plan)
 
     try:
         run_pipeline(

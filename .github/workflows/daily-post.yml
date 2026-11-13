@@ -16,9 +16,15 @@ on:
         required: false
         default: true
         type: boolean
+      resume_run_id:
+        description: "Run ID of a failed run to resume (reuses its script and narration, no Gemini spend)"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   post:
@@ -82,9 +88,19 @@ jobs:
       - name: Preflight
         run: python -m src.main --check
 
+      - name: Restore saved work from a failed run
+        if: inputs.resume_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: work-${{ inputs.resume_run_id }}
+          path: work
+          run-id: ${{ inputs.resume_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Render and publish
         env:
           IDEA_OVERRIDE: ${{ inputs.idea }}
+          RESUME: ${{ inputs.resume_run_id != '' && '1' || '0' }}
           # Scheduled runs have no inputs; default to Ken Burns (no FAL spend).
           SKIP_MOTION: ${{ inputs.no_motion == false && '0' || '1' }}
         run: |
@@ -92,7 +108,9 @@ jobs:
           if [ "$SKIP_MOTION" = "1" ]; then
             ARGS+=(--no-motion)
           fi
-          if [ -n "$IDEA_OVERRIDE" ]; then
+          if [ "$RESUME" = "1" ]; then
+            ARGS+=(--resume)
+          elif [ -n "$IDEA_OVERRIDE" ]; then
             ARGS+=(--idea "$IDEA_OVERRIDE")
           fi
           python -m tools.daily_post "${ARGS[@]}"
@@ -112,3 +130,14 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: record daily posted idea"
           git push
+
+      - name: Save work for resuming
+        # Runs even when publishing failed, so the paid script and narration
+        # survive. Resume with the run ID in the Actions "Run workflow" form.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: work-${{ github.run_id }}
+          path: work
+          retention-days: 7
+          if-no-files-found: ignore
