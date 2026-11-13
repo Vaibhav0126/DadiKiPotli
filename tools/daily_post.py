@@ -219,6 +219,15 @@ def _resume_point() -> tuple[str, Plan]:
     return idea, plan or _plan_for_override(idea)
 
 
+def _posted_today(uploads: list[dict], now: datetime) -> str | None:
+    """The video ID of a Short already posted on this UTC day, if there is one."""
+    for upload in uploads:
+        published = datetime.fromisoformat(upload["published_at"]).astimezone(timezone.utc)
+        if published.date() == now.date():
+            return upload["video_id"]
+    return None
+
+
 def _record_upload(idea: str, plan: Plan) -> None:
     """Remember what was posted so the next run can weigh how it did."""
     result_path = work_dir(slugify(idea)) / "publish_result.json"
@@ -402,6 +411,14 @@ def main() -> int:
         if not args.no_motion and not cfg.fal_key:
             log.info("FAL_KEY not set; using --no-motion")
         cfg.motion.enabled = False
+
+    # One Short a day: a manual run after the scheduled one, or the other way
+    # round, must not post a second. Checked before any Gemini call.
+    if _queue_key(profile) == "short":
+        posted = _posted_today(performance.load(), datetime.now(timezone.utc))
+        if posted:
+            log.info("a Short was already posted today (%s); one per day, skipping", posted)
+            return 0
 
     if not cfg.youtube_token_path().exists():
         log.error(
