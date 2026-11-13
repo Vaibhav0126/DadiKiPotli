@@ -1,4 +1,5 @@
 # Ideas already posted by tools.daily_post (short queue; newest at the bottom).
+# Format: [kind|character|premise] idea. Lines without a prefix are older posts.
 
 Akbar tasks Birbal with identifying the thief of a book of secrets that contains only blank pages.
 Tenali Raman exposes a corrupt merchant claiming his magical scales can measure the weight of a person's spoken promises.
@@ -82,3 +83,4 @@ Tenali Raman settles a dispute where an umbrella merchant sues a tree owner for 
 Betaal asks Vikram if an executioner who blinded himself to avoid executing an innocent saint committed duty or cowardice.
 Tenali Raman settles a lawsuit where a candle-maker sues a night watchman for extinguishing street lanterns early to hoard wax.
 Betaal asks Vikram if an astrologer who lied about an eclipse to prevent war committed treason or wisdom.
+[new|Tenali Raman|test_of_wits] To avoid execution, Tenali Raman must present a rival sultan with a living, full-sized watermelon inside a narrow bottle.
