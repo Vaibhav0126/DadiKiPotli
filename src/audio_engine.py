@@ -74,7 +74,11 @@ class Boundary:
 
 
 def _client(cfg: Config) -> genai.Client:
-    return genai.Client(api_key=cfg.gemini_api_key)
+    # TTS needs v1beta: the default API version rejects speechConfig.
+    return genai.Client(
+        api_key=cfg.gemini_api_key,
+        http_options=types.HttpOptions(api_version="v1beta"),
+    )
 
 
 def _pcm_bytes(data: bytes | str) -> bytes:
