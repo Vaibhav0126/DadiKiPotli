@@ -1,11 +1,11 @@
 """Sound effects synthesized with ffmpeg, so no licensed sound files are needed.
 
-Both effects are generated into assets/sfx/ the first time they are needed:
+The effect is generated into assets/sfx/ the first time it is needed:
 
-- whoosh: filtered pink noise with a fast fade in and out, on each scene change
 - dhol: a low, pitch-dropping thump with an exponential decay, on the twist
 
-They are mixed under the narration by composer.mix_audio.
+It is mixed under the narration by composer.mix_audio. There is no whoosh on
+scene changes: it was removed because it distracted from the video.
 """
 
 from __future__ import annotations
@@ -20,11 +20,6 @@ SFX_DIR = ROOT / "assets" / "sfx"
 
 # name -> (ffmpeg input args, audio filter chain)
 _SPECS: dict[str, tuple[list[str], str]] = {
-    "whoosh": (
-        ["-f", "lavfi", "-i", "anoisesrc=d=0.4:c=pink:r=48000:a=0.6"],
-        "highpass=f=300,lowpass=f=3500,"
-        "afade=t=in:st=0:d=0.12,afade=t=out:st=0.18:d=0.22,volume=0.9",
-    ),
     "dhol": (
         [
             "-f", "lavfi", "-i",
@@ -35,7 +30,7 @@ _SPECS: dict[str, tuple[list[str], str]] = {
 }
 
 # Gain applied to a cue at mix time, relative to the narration.
-CUE_GAIN = {"whoosh": 0.55, "dhol": 0.7}
+CUE_GAIN = {"dhol": 0.7}
 
 
 def ensure_sfx(directory: Path = SFX_DIR) -> dict[str, Path]:
@@ -56,13 +51,10 @@ def ensure_sfx(directory: Path = SFX_DIR) -> dict[str, Path]:
 def cues(timeline: Timeline) -> list[tuple[float, str, float]]:
     """(start seconds, effect name, gain) for every sound in the video.
 
-    A whoosh marks each cut between scenes. The dhol lands on the twist, the
-    scene the whole video is built around.
+    The dhol lands on the twist, the scene the whole video is built around.
     """
     beats = {s.scene_number: s.beat for s in timeline.story.scenes}
     out: list[tuple[float, str, float]] = []
-    for audio in timeline.audio[1:]:
-        out.append((audio.start, "whoosh", CUE_GAIN["whoosh"]))
     # A story can tag more than one scene as twist. The thump marks the first.
     twist = next((a for a in timeline.audio if beats.get(a.scene_number) == "twist"), None)
     if twist is not None:

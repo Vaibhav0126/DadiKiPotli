@@ -45,9 +45,9 @@ def _timeline(beats: list[str]) -> Timeline:
 
 
 class CueTests(unittest.TestCase):
-    def test_whoosh_on_every_cut_but_not_the_first_scene(self) -> None:
+    def test_no_whoosh_on_scene_changes(self) -> None:
         names = [name for _, name, _ in cues(_timeline(["hook", "setup", "conflict"]))]
-        self.assertEqual(names.count("whoosh"), 2)
+        self.assertNotIn("whoosh", names)
 
     def test_dhol_lands_once_even_if_two_scenes_are_twist(self) -> None:
         timeline = _timeline(["hook", "twist", "twist", "moral"])
