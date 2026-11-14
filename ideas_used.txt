@@ -84,3 +84,4 @@ Betaal asks Vikram if an executioner who blinded himself to avoid executing an i
 Tenali Raman settles a lawsuit where a candle-maker sues a night watchman for extinguishing street lanterns early to hoard wax.
 Betaal asks Vikram if an astrologer who lied about an eclipse to prevent war committed treason or wisdom.
 [new|Tenali Raman|test_of_wits] To avoid execution, Tenali Raman must present a rival sultan with a living, full-sized watermelon inside a narrow bottle.
+[classic|Akbar-Birbal|riddle] Akbar asks for the most beautiful child in the city; a maid brings her own plain-looking son, and Birbal explains why every mother is right.
