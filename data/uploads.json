@@ -6,9 +6,9 @@
       "premise": "test_of_wits",
       "kind": "new",
       "published_at": "2026-11-13T06:11:55.167235+00:00",
-      "views": null,
-      "likes": null,
-      "stats_at": null
+      "views": 161,
+      "likes": 11,
+      "stats_at": "2026-11-15T19:27:49.206626+00:00"
     },
     {
       "video_id": "hNQFQDgBPGM",
@@ -16,6 +16,16 @@
       "premise": "riddle",
       "kind": "classic",
       "published_at": "2026-11-14T18:54:16.087831+00:00",
+      "views": null,
+      "likes": null,
+      "stats_at": null
+    },
+    {
+      "video_id": "cZRnht_gZb0",
+      "character": "Tenali Raman",
+      "premise": "trick",
+      "kind": "classic",
+      "published_at": "2026-11-15T19:31:24.561378+00:00",
       "views": null,
       "likes": null,
       "stats_at": null
