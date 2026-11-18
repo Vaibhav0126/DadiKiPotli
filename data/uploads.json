@@ -6,9 +6,9 @@
       "premise": "test_of_wits",
       "kind": "new",
       "published_at": "2026-11-13T06:11:55.167235+00:00",
-      "views": 161,
+      "views": 162,
       "likes": 12,
-      "stats_at": "2026-11-17T21:52:28.209309+00:00"
+      "stats_at": "2026-11-18T21:31:36.937665+00:00"
     },
     {
       "video_id": "hNQFQDgBPGM",
@@ -16,9 +16,9 @@
       "premise": "riddle",
       "kind": "classic",
       "published_at": "2026-11-14T18:54:16.087831+00:00",
-      "views": 18,
+      "views": 19,
       "likes": 4,
-      "stats_at": "2026-11-17T21:52:28.209309+00:00"
+      "stats_at": "2026-11-18T21:31:36.937665+00:00"
     },
     {
       "video_id": "cZRnht_gZb0",
@@ -26,9 +26,9 @@
       "premise": "trick",
       "kind": "classic",
       "published_at": "2026-11-15T19:31:24.561378+00:00",
-      "views": 21,
+      "views": 25,
       "likes": 4,
-      "stats_at": "2026-11-17T21:52:28.209309+00:00"
+      "stats_at": "2026-11-18T21:31:36.937665+00:00"
     },
     {
       "video_id": "wvdcf8r6qXU",
@@ -46,6 +46,16 @@
       "premise": "trick",
       "kind": "classic",
       "published_at": "2026-11-17T21:57:45.018810+00:00",
+      "views": null,
+      "likes": null,
+      "stats_at": null
+    },
+    {
+      "video_id": "_acsFjQW480",
+      "character": "Akbar-Birbal",
+      "premise": "rescue",
+      "kind": "new",
+      "published_at": "2026-11-18T21:35:42.882396+00:00",
       "views": null,
       "likes": null,
       "stats_at": null

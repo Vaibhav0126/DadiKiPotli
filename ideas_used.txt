@@ -88,3 +88,4 @@ Betaal asks Vikram if an astrologer who lied about an eclipse to prevent war com
 [classic|Tenali Raman|trick] Thieves hide outside Tenali's house; he loudly tells his wife their valuables are in the well, and the thieves spend all night drawing water, which waters his whole garden.
 [new|Akbar-Birbal|riddle] To save a framed cook from execution by sunset, Birbal must decipher a riddle hidden in a burnt loaf.
 [classic|Tenali Raman|trick] The angry king orders Tenali never to show his face again; Tenali comes to court with a clay pot over his head.
+[new|Akbar-Birbal|rescue] Locked in a rapidly flooding vault by rivals, Birbal must trick the guard outside to escape drowning.
