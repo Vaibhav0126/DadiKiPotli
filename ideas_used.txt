@@ -90,3 +90,4 @@ Betaal asks Vikram if an astrologer who lied about an eclipse to prevent war com
 [classic|Tenali Raman|trick] The angry king orders Tenali never to show his face again; Tenali comes to court with a clay pot over his head.
 [new|Akbar-Birbal|rescue] Locked in a rapidly flooding vault by rivals, Birbal must trick the guard outside to escape drowning.
 [classic|Vikram-Betaal|riddle] Prince Jimutavahana offers himself to the eagle Garuda in place of the serpent Shankhachuda, who then runs back to stop him. Betaal asks Vikram who was the nobler one.
+[classic|Tenali Raman|comeuppance] A royal gatekeeper demands a share of every reward; Tenali asks the king for a hundred lashes as his prize and insists the gatekeeper receive his share first.
