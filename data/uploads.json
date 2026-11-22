@@ -8,7 +8,7 @@
       "published_at": "2026-11-13T06:11:55.167235+00:00",
       "views": 165,
       "likes": 12,
-      "stats_at": "2026-11-21T20:12:48.433302+00:00"
+      "stats_at": "2026-11-22T20:27:14.651116+00:00"
     },
     {
       "video_id": "hNQFQDgBPGM",
@@ -18,7 +18,7 @@
       "published_at": "2026-11-14T18:54:16.087831+00:00",
       "views": 20,
       "likes": 4,
-      "stats_at": "2026-11-21T20:12:48.433302+00:00"
+      "stats_at": "2026-11-22T20:27:14.651116+00:00"
     },
     {
       "video_id": "cZRnht_gZb0",
@@ -28,7 +28,7 @@
       "published_at": "2026-11-15T19:31:24.561378+00:00",
       "views": 27,
       "likes": 4,
-      "stats_at": "2026-11-21T20:12:48.433302+00:00"
+      "stats_at": "2026-11-22T20:27:14.651116+00:00"
     },
     {
       "video_id": "wvdcf8r6qXU",
@@ -38,7 +38,7 @@
       "published_at": "2026-11-16T23:04:27.381758+00:00",
       "views": 24,
       "likes": 3,
-      "stats_at": "2026-11-21T20:12:48.433302+00:00"
+      "stats_at": "2026-11-22T20:27:14.651116+00:00"
     },
     {
       "video_id": "DfAWKtT9nKU",
@@ -48,7 +48,7 @@
       "published_at": "2026-11-17T21:57:45.018810+00:00",
       "views": 3,
       "likes": 2,
-      "stats_at": "2026-11-21T20:12:48.433302+00:00"
+      "stats_at": "2026-11-22T20:27:14.651116+00:00"
     },
     {
       "video_id": "_acsFjQW480",
@@ -56,9 +56,9 @@
       "premise": "rescue",
       "kind": "new",
       "published_at": "2026-11-18T21:35:42.882396+00:00",
-      "views": 269,
+      "views": 272,
       "likes": 2,
-      "stats_at": "2026-11-21T20:12:48.433302+00:00"
+      "stats_at": "2026-11-22T20:27:14.651116+00:00"
     },
     {
       "video_id": "QIeL9rlPJ_4",
@@ -76,6 +76,16 @@
       "premise": "comeuppance",
       "kind": "classic",
       "published_at": "2026-11-21T20:17:50.092026+00:00",
+      "views": null,
+      "likes": null,
+      "stats_at": null
+    },
+    {
+      "video_id": "s2ltCLRhDA8",
+      "character": "Akbar-Birbal",
+      "premise": "test_of_wits",
+      "kind": "new",
+      "published_at": "2026-11-22T20:31:14.749873+00:00",
       "views": null,
       "likes": null,
       "stats_at": null
