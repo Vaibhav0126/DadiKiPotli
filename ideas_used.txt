@@ -94,3 +94,4 @@ Betaal asks Vikram if an astrologer who lied about an eclipse to prevent war com
 [new|Akbar-Birbal|test_of_wits] To save Akbar's throne from invasion, Birbal must fulfill a foreign king's demand for a feast cooked of silence.
 [new|Tenali Raman|comeuppance] A greedy landlord claims everything on his land is his; how will Tenali trick him into adopting royal debts?
 [classic|Vikram-Betaal|riddle] A condemned thief first weeps and then laughs on the way to his execution. Betaal asks Vikram why he laughed.
+[new|Akbar-Birbal|rescue] Trapped in a pit with a hungry panther, how will Birbal use Emperor Akbar's royal turban to escape alive?
