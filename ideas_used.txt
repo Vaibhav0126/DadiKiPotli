@@ -95,3 +95,4 @@ Betaal asks Vikram if an astrologer who lied about an eclipse to prevent war com
 [new|Tenali Raman|comeuppance] A greedy landlord claims everything on his land is his; how will Tenali trick him into adopting royal debts?
 [classic|Vikram-Betaal|riddle] A condemned thief first weeps and then laughs on the way to his execution. Betaal asks Vikram why he laughed.
 [new|Akbar-Birbal|rescue] Trapped in a pit with a hungry panther, how will Birbal use Emperor Akbar's royal turban to escape alive?
+[new|Tenali Raman|comeuppance] A greedy miser charges rent for rainwater; how will Tenali Raman trick him into paying for royal flood damage?
